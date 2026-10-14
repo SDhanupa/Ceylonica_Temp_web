@@ -1,0 +1,394 @@
+# Public portal schema: the query fields and types used by the GN page and the
+# industry survey, copied verbatim from the main app's graphql/schema.graphql.
+# Admin queries and all mutations are omitted (they require authentication).
+
+scalar DateTime @scalar(class: "Nuwave\\Lighthouse\\Schema\\Types\\Scalars\\DateTime")
+
+type Query {
+    "Get GN by CCODE directly"
+    gnByCcode(CCODE: String! @eq): GramaNiladhari @find
+
+    "Get all active questions"
+    questions: [Question!]!
+        @field(resolver: "App\\GraphQL\\Queries\\QuestionQueries@questions")
+
+    "Get subcategories by parent slug"
+    categoryBySlug(slug: String!): Category @cache(maxAge: 3600)
+        @field(resolver: "App\\GraphQL\\Queries\\CategoryQueries@categoryBySlug")
+
+    "Get all descendants of a root slug as a flat searchable list with breadcrumbs"
+    categoriesByRootSlug(rootSlug: String!): [FlatCategory!]!
+        @field(resolver: "App\\GraphQL\\Queries\\CategoryQueries@categoriesByRootSlug")
+
+    gnByCoordinates(lat: Float!, lng: Float!): GramaNiladhari @field(resolver: "App\\GraphQL\\Queries\\GnByCoordinates") @cache(maxAge: 3600)
+
+    "PDistricts"
+    pDistricts: [PDistrict!]! @all @cache(maxAge: 3600)
+
+    pDistrict(id: ID! @eq): PDistrict @find @cache(maxAge: 3600)
+}
+
+type Question {
+    id: ID!
+    category: Category @belongsTo
+    section: String
+    questionTextEn: String! @rename(attribute: "question_text_en")
+    questionTextSi: String @rename(attribute: "question_text_si")
+    questionTextTa: String @rename(attribute: "question_text_ta")
+    explanationEn: String @rename(attribute: "explanation_en")
+    explanationSi: String @rename(attribute: "explanation_si")
+    explanationTa: String @rename(attribute: "explanation_ta")
+    inputType: String! @rename(attribute: "input_type")
+    isRepeater: Boolean! @rename(attribute: "is_repeater")
+    sortOrder: Int! @rename(attribute: "sort_order")
+    isActive: Boolean! @rename(attribute: "is_active")
+    isStandard: Boolean! @rename(attribute: "is_standard")
+    createdAt: DateTime! @rename(attribute: "created_at")
+    updatedAt: DateTime @rename(attribute: "updated_at")
+}
+
+type FlatCategory {
+    id: ID!
+    slug: String!
+    nameEn: String!
+    nameSi: String!
+    nameTa: String!
+    parentId: ID
+    breadcrumb: String!
+    depth: Int!
+}
+
+type Category {
+    id: ID!
+    parent: Category
+    children: [Category!]
+    ancestors: [Category!]!
+    questions: [Question!]
+    slug: String!
+    code: String
+    nameEn: String! @rename(attribute: "name_en")
+    nameSi: String! @rename(attribute: "name_si")
+    nameTa: String @rename(attribute: "name_ta")
+    descriptionEn: String @rename(attribute: "description_en")
+    descriptionSi: String @rename(attribute: "description_si")
+    descriptionTa: String @rename(attribute: "description_ta")
+    imagePath: String @rename(attribute: "image_path")
+    sortOrder: Int! @rename(attribute: "sort_order")
+    progress: Float @field(resolver: "App\\GraphQL\\Queries\\CategoryQueries@progress")
+    createdAt: DateTime! @rename(attribute: "created_at")
+    updatedAt: DateTime @rename(attribute: "updated_at")
+}
+
+type PGn {
+    id: ID!
+    ccode: String @rename(attribute: "CCODE")
+    gramaNiladhariId: ID @rename(attribute: "grama_niladhari_id")
+    gnName: String @rename(attribute: "gn_name")
+    populationBoth: Int @rename(attribute: "population_both")
+    populationMale: Int @rename(attribute: "population_male")
+    populationFemale: Int @rename(attribute: "population_female")
+    age_0_14: Int
+    age_15_59: Int
+    age_60_64: Int
+    age_65_above: Int
+}
+
+type GramaNiladhari {
+    id: ID!
+    provinceCode: String @rename(attribute: "province_code")
+    PCCODE: String
+    districtCode: String @rename(attribute: "district_code")
+    DCCODE: String
+    divisionalSecretariatCode: String @rename(attribute: "divisional_secretariat_code")
+    DSCCODE: String
+    code: String
+    CCODE: String
+    nameSi: String @rename(attribute: "name_si")
+    nameEn: String @rename(attribute: "name_en")
+    nameTa: String @rename(attribute: "name_ta")
+    proEn: String @rename(attribute: "pro_en")
+    proSi: String @rename(attribute: "pro_si")
+    proTa: String @rename(attribute: "pro_ta")
+    disEn: String @rename(attribute: "dis_en")
+    disSi: String @rename(attribute: "dis_si")
+    disTa: String @rename(attribute: "dis_ta")
+    dsEn: String @rename(attribute: "ds_en")
+    dsSi: String @rename(attribute: "ds_si")
+    dsTa: String @rename(attribute: "ds_ta")
+    police: Police @hasOne
+    postOffice: PostOffice @belongsTo
+    pGn: PGn @hasOne @cache(maxAge: 86400)
+    pDistrict: PDistrict @belongsTo @cache(maxAge: 86400)
+    gnEconomy: GnEconomy @hasOne
+    housingOwnershipStatus: HousingOwnershipStatus @hasOne
+    housingWallType: HousingWallType @hasOne
+    housingUnitType: HousingUnitType @hasOne
+    toiletFacility: ToiletFacility @hasOne
+    drinkingWaterSource: DrinkingWaterSource @hasOne
+    solidWasteDisposal: SolidWasteDisposal @hasOne
+    roomsInHousingUnit: RoomsInHousingUnit @hasOne
+    housingRoofType: HousingRoofType @hasOne
+    religiousAffiliation: ReligiousAffiliation @hasOne
+    householdHeadRelationship: HouseholdHeadRelationship @hasOne
+    boundary: GnBoundary @field(resolver: "App\\GraphQL\\Queries\\GramaNiladhariQueries@boundary")
+}
+
+type GnBoundary {
+    minLat: Float @rename(attribute: "min_lat")
+    maxLat: Float @rename(attribute: "max_lat")
+    minLng: Float @rename(attribute: "min_lng")
+    maxLng: Float @rename(attribute: "max_lng")
+    polygons: String
+}
+
+type HouseholdHeadRelationship {
+    id: ID!
+    gn_id: ID @rename(attribute: "grama_niladhari_id")
+    gn_name: String
+    total_population: Int
+    head: Int
+    wife_husband: Int
+    son_daughter: Int
+    son_daughter_in_law: Int
+    grandchild_great_grandchild: Int
+    parent_of_head_or_spouse: Int
+    other_relative: Int
+    domestic_employee: Int
+    boarder: Int
+    non_relative: Int
+    clergy: Int
+    not_stated: Int
+}
+
+type SolidWasteDisposal {
+    id: ID!
+    gn_id: ID
+    gn_name: String
+    ds_division: String
+    district: String
+    province: String
+    total_households: Int
+    collected_by_local_authorities: Int
+    occupants_burn: Int
+    occupants_bury: Int
+    occupants_composting: Int
+    dispose_into_environment: Int
+    other: Int
+}
+
+type DrinkingWaterSource {
+    id: ID!
+    gn_id: ID
+    gn_name: String
+    ds_division: String
+    district: String
+    province: String
+    total_households: Int
+    protected_well_within: Int
+    protected_well_outside: Int
+    unprotected_well: Int
+    tap_within_unit: Int
+    tap_within_premises_outside: Int
+    tap_outside_premises: Int
+    rural_water_projects: Int
+    tube_well: Int
+    bowser: Int
+    river_tank_stream: Int
+    other: Int
+}
+
+type ToiletFacility {
+    id: ID!
+    gn_id: ID
+    gn_name: String
+    ds_division: String
+    district: String
+    province: String
+    total_households: Int
+    water_seal_piped_sewer: Int
+    water_seal_septic_tank: Int
+    pour_flush: Int
+    direct_pit: Int
+    other: Int
+    not_using: Int
+}
+
+type HousingUnitType {
+    id: ID!
+    gn_id: ID
+    gn_name: String
+    ds_division: String
+    district: String
+    province: String
+    total_units: Int
+    permanent: Int
+    semi_permanent: Int
+    improvised: Int
+    unclassified: Int
+}
+
+type HousingWallType {
+    id: ID!
+    gn_id: ID
+    gn_name: String
+    ds_division: String
+    district: String
+    province: String
+    total_units: Int
+    brick: Int
+    cement_block_stone: Int
+    cabook: Int
+    soil_bricks: Int
+    mud: Int
+    cadjan_palmyrah: Int
+    plank_metal_sheet: Int
+    other: Int
+}
+
+type ReligiousAffiliation {
+    id: ID!
+    gn_id: ID @rename(attribute: "grama_niladhari_id")
+    gn_name: String
+    total_population: Int
+    buddhist: Int
+    hindu: Int
+    islam: Int
+    roman_catholic: Int
+    other_christian: Int
+    other: Int
+}
+
+type HousingRoofType {
+    id: ID!
+    gn_id: ID @rename(attribute: "grama_niladhari_id")
+    gn_name: String
+    total_housing_units: Int
+    tile: Int
+    asbestos: Int
+    concrete: Int
+    zink_aluminium_sheet: Int
+    metal_sheet: Int
+    cadjan_palmyrah_straw: Int
+    other: Int
+}
+
+type RoomsInHousingUnit {
+    id: ID!
+    gn_id: ID @rename(attribute: "grama_niladhari_id")
+    gn_name: String
+    total_housing_units: Int
+    room_1: Int
+    rooms_2: Int
+    rooms_3: Int
+    rooms_4: Int
+    rooms_5: Int
+    rooms_6: Int
+    rooms_7: Int
+    rooms_8: Int
+    rooms_9: Int
+    rooms_10_and_above: Int
+}
+
+type HousingOwnershipStatus {
+    id: ID!
+    gn_id: ID
+    gn_name: String
+    ds_division: String
+    district: String
+    province: String
+    total_households: Int
+    owned_by_member: Int
+    rent_gov: Int
+    rent_private: Int
+    free_of_rent: Int
+    encroached: Int
+    other: Int
+}
+
+type Police {
+    id: ID!
+    ccode: String
+    gndId: String @rename(attribute: "gnd_id")
+    name: String
+    provinceId: String @rename(attribute: "province_id")
+    districtId: String @rename(attribute: "district_id")
+    dsdId: String @rename(attribute: "dsd_id")
+    pdId: String @rename(attribute: "pd_id")
+    gndNum: String @rename(attribute: "gnd_num")
+    lat: String
+    lng: String
+    psId: String @rename(attribute: "ps_id")
+    psName: String @rename(attribute: "ps_name")
+    psNameSi: String @rename(attribute: "ps_name_si")
+    psNameTa: String @rename(attribute: "ps_name_ta")
+    distanceToThePoliceStation: String @rename(attribute: "distance_to_the_police_station")
+    gramaNiladhari: GramaNiladhari @belongsTo
+}
+
+type PostOffice {
+    id: ID!
+    countryCode: String @rename(attribute: "country_code")
+    province: String
+    provinceCode: String @rename(attribute: "province_code")
+    district: String
+    disid: String
+    dsAga: String @rename(attribute: "ds_aga")
+    dsCode: String @rename(attribute: "ds_code")
+    postalCode: String @rename(attribute: "postal_code")
+    placeNameEnglish: String @rename(attribute: "place_name_english")
+    sinhala: String
+    tamil: String
+    latitude: Float
+    longitude: Float
+    accuracy: String
+    gramaNiladharis: [GramaNiladhari!] @hasMany
+}
+
+type PProvince {
+    id: ID!
+    admin1NameEn: String @rename(attribute: "admin1Name_en")
+    admin1NameSi: String @rename(attribute: "admin1Name_si")
+    admin1NameTa: String @rename(attribute: "admin1Name_ta")
+    admin1Pcode: String
+    populationBoth: Int
+    populationMale: Int
+    populationFemale: Int
+    districts: [PDistrict!] @hasMany
+}
+
+type PDistrict {
+    id: ID!
+    admin2NameEn: String @rename(attribute: "admin2Name_en")
+    admin2NameSi: String @rename(attribute: "admin2Name_si")
+    admin2NameTa: String @rename(attribute: "admin2Name_ta")
+    admin2Pcode: String
+    admin1Pcode: String
+    populationBoth: Int
+    populationMale: Int
+    populationFemale: Int
+    pProvince: PProvince @belongsTo
+    gramaNiladharis: [GramaNiladhari!] @hasMany @cache(maxAge: 86400)
+}
+
+type PGn {
+    id: ID!
+    gnName: String @rename(attribute: "gn_name")
+    populationBoth: Int @rename(attribute: "population_both")
+    populationMale: Int @rename(attribute: "population_male")
+    populationFemale: Int @rename(attribute: "population_female")
+    age_0_14: Int
+    age_15_59: Int
+    age_60_64: Int
+    age_65_above: Int
+    gramaNiladhari: GramaNiladhari @belongsTo
+}
+
+type GnEconomy {
+    id: ID!
+    name: String
+    gn_number: String
+    total: Int
+    employed: Int
+    unemployed: Int
+    economically_not_active: Int
+}

@@ -1,0 +1,91 @@
+# Environment files
+.env
+.env.*
+
+# Git
+.git
+.gitignore
+.gitattributes
+.github
+
+# Local dev / scratch files
+*.json
+!composer.json
+*.py
+*.php.bak
+*.md
+!README.md
+
+# Large data files
+*.xlsx
+*.csv
+*.pdf
+*.gz
+*.sql
+*.zip
+
+# Node
+node_modules
+npm-debug.log
+
+# Vendor (rebuilt in Docker)
+vendor
+
+# Test / debug files
+test*.php
+check*.php
+analyze*.py
+export*.py
+extract*.py
+import*.php
+fix*.php
+generate*.php
+generate*.py
+update*.php
+map*.php
+merge*.php
+sync*.php
+diagnose*.php
+inspect*.php
+list*.php
+fetch*.php
+dump*.php
+get*.php
+query*.php
+run*.php
+show*.php
+fast*.php
+wipe*.php
+create*.php
+remove*.php
+parse*.py
+convert*.py
+process*.py
+modify*.py
+
+# Large JSON data dumps
+*_data.json
+*_updates.json
+*_updates2.json
+grama_niladharis_update.json
+duplicates.json
+gql_output*.json
+output*.json
+prod_slugs.json
+user_id_map.json
+drinking_water_data.json
+housing_ownership_data.json
+solid_waste_data.json
+toilet_facilities_data.json
+unit_types_data.json
+wall_types_data.json
+
+# IDE
+.vscode
+.idea
+.agents
+.agent
+
+# OS
+.DS_Store
+Thumbs.db
