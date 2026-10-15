@@ -223,20 +223,49 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
 
 
   const uniqueCities = React.useMemo(() => {
-    if (!gnData?.pDistrict?.gramaNiladharis) return [];
+    const gnRows = gnData?.pDistrict?.gramaNiladharis;
+    if (!gnRows) return [];
     const citiesMap = new Map();
-    gnData.pDistrict.gramaNiladharis.forEach((gn: any) => {
+    gnRows.forEach((gn: any) => {
       const code = gn.divisionalSecretariatCode || gn.dsEn;
-      if (code && !citiesMap.has(code)) {
+      const existingCity = code ? citiesMap.get(code) : null;
+      if (code && !existingCity) {
         citiesMap.set(code, {
           divisionalSecretariatCode: code,
           dsEn: gn.dsEn || gn.divisionalSecretariatCode,
           dsSi: gn.dsSi,
           dsTa: gn.dsTa,
         });
+      } else if (existingCity) {
+        // A DS division occurs on many GN rows. Some rows do not have the
+        // Sinhala/Tamil value even though another row for the same DS does.
+        // Merge the localized values rather than permanently keeping the
+        // first (often English-only) row that arrived from GraphQL.
+        if (!existingCity.dsEn && gn.dsEn) existingCity.dsEn = gn.dsEn;
+        if (!existingCity.dsSi && gn.dsSi) existingCity.dsSi = gn.dsSi;
+        if (!existingCity.dsTa && gn.dsTa) existingCity.dsTa = gn.dsTa;
       }
     });
-    return Array.from(citiesMap.values());
+    const normaliseName = (value?: string) => value?.trim().toLocaleLowerCase() || '';
+
+    return Array.from(citiesMap.values()).map((city: any) => {
+      const dsName = normaliseName(city.dsEn);
+      const matchingGn = dsName
+        ? gnRows.find(
+            (gn: any) =>
+              (gn.divisionalSecretariatCode || gn.dsEn) === city.divisionalSecretariatCode &&
+              normaliseName(gn.nameEn) === dsName,
+          )
+        : undefined;
+
+      // Some legacy DS records have no translated value. A GN with the same
+      // English name provides the equivalent Sinhala/Tamil DS display name.
+      return {
+        ...city,
+        dsSi: city.dsSi || matchingGn?.nameSi || city.dsEn,
+        dsTa: city.dsTa || matchingGn?.nameTa || city.dsEn,
+      };
+    });
   }, [gnData]);
 
   const filteredGNs = React.useMemo(() => {
@@ -684,6 +713,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 1 }}>
               <FormControl fullWidth>
                 <Autocomplete
+                  key={`district-${language}`}
                   options={districtsData?.pDistricts || []}
                   getOptionLabel={(option: any) => {
                     if (!option) return '';
@@ -717,6 +747,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
 
               <FormControl fullWidth disabled={!selectedDistrict || gnLoading}>
                 <Autocomplete
+                  key={`ds-${language}`}
                   options={uniqueCities}
                   getOptionLabel={(option: any) => {
                     if (!option) return '';
@@ -749,6 +780,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
 
               <FormControl fullWidth disabled={!selectedCity || gnLoading}>
                 <Autocomplete
+                  key={`gn-${language}`}
                   options={filteredGNs}
                   getOptionLabel={(option: any) => {
                     if (!option) return '';

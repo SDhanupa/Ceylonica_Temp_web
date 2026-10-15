@@ -144,6 +144,7 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
      drawer — one definition, so the two can't drift apart. */
   const districtSelect = (
     <Select
+      key={`district-${language}`}
       size="small"
       value={selectedDistrict || ''}
       onChange={(e) => onDistrictChange?.(e.target.value)}
@@ -165,6 +166,7 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
 
   const dsSelect = (
     <Select
+      key={`ds-${language}`}
       size="small"
       value={selectedCity || ''}
       onChange={(e) => onCityChange?.(e.target.value)}
@@ -187,6 +189,7 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
 
   const gnSelect = (
     <Select
+      key={`gn-${language}`}
       size="small"
       value={selectedGN || ''}
       onChange={(e) => onGNChange?.(e.target.value)}

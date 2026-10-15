@@ -107,6 +107,7 @@ const MobileLocationSheet: React.FC<MobileLocationSheetProps> = ({
           <FormControl fullWidth size="medium">
             <InputLabel sx={labelSx}>{L('District', 'දිස්ත්‍රික්කය', 'மாவட்டம்')}</InputLabel>
             <Select
+              key={`district-${language}`}
               label={L('District', 'දිස්ත්‍රික්කය', 'மாவட்டம்')}
               value={selectedDistrict || ''}
               onChange={(e) => onDistrictChange(e.target.value)}
@@ -124,6 +125,7 @@ const MobileLocationSheet: React.FC<MobileLocationSheetProps> = ({
           <FormControl fullWidth size="medium" disabled={!selectedDistrict || dsDivisions.length === 0}>
             <InputLabel sx={labelSx}>{L('DS Division', 'ප්‍රාදේශීය ලේකම්', 'பிரதேச செயலகம்')}</InputLabel>
             <Select
+              key={`ds-${language}`}
               label={L('DS Division', 'ප්‍රාදේශීය ලේකම්', 'பிரதேச செயலகம்')}
               value={selectedCity || ''}
               onChange={(e) => onCityChange(e.target.value)}
@@ -141,6 +143,7 @@ const MobileLocationSheet: React.FC<MobileLocationSheetProps> = ({
           <FormControl fullWidth size="medium" disabled={!selectedCity || gramaNiladharis.length === 0}>
             <InputLabel sx={labelSx}>{L('Village (GN)', 'ග්‍රාම නිලධාරී', 'கிராமம்')}</InputLabel>
             <Select
+              key={`gn-${language}`}
               label={L('Village (GN)', 'ග්‍රාම නිලධාරී', 'கிராமம்')}
               value={selectedGN || ''}
               onChange={(e) => onGNChange(e.target.value)}
