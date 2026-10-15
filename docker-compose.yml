@@ -60,8 +60,9 @@ services:
       - REDIS_PORT=6379
       - QUEUE_CONNECTION=sync
     volumes:
-      # The main app's uploaded files, served by /api/uploads/{path}.
-      - main_uploads:/var/www/public/uploads:ro
+      # Shared uploaded files. Industry-survey photos are saved only under
+      # uploads/industry-survey and served through /api/uploads/{path}.
+      - main_uploads:/var/www/public/uploads
     networks:
       - celonica_net
 

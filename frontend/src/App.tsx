@@ -12,6 +12,7 @@ import apolloClient from './api/apolloClient';
 import UserDashboard from './pages/UserDashboard';
 import CategoryDetailPage from './pages/CategoryDetailPage';
 import IndustrySurveyPage from './pages/IndustrySurveyPage';
+import PublicBusinessProfilePage from './pages/PublicBusinessProfilePage';
 
 /**
  * Public portal: the main app's App.tsx reduced to the GN page and industry
@@ -55,6 +56,10 @@ const App: React.FC = () => {
               <Route
                 path="/industry-survey/:gnName/:ccode"
                 element={<IndustrySurveyPage />}
+              />
+              <Route
+                path="/business/:regNumber"
+                element={<PublicBusinessProfilePage />}
               />
               <Route
                 path="/gnpage/:gnName/:ccode/:categorySlug"

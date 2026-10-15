@@ -55,6 +55,10 @@ class IndustrySurveyController extends Controller
             // Single-use proof from OtpController::verify(), required only when
             // actually submitting (drafts can be saved before verification).
             'mobile_verification_token' => 'nullable|string',
+            // The public site origin supplied by the submitting browser. It is
+            // used only for the post-submission profile link sent to that same
+            // OTP-verified mobile number.
+            'public_profile_base_url' => 'nullable|url|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -160,7 +164,12 @@ class IndustrySurveyController extends Controller
                     }
 
                     // Send SMS with profile + QR links
-                    $this->sendBusinessProfileSms($survey->fresh(), $formData);
+                    $this->sendBusinessProfileSms(
+                        $survey->fresh(),
+                        $formData,
+                        $request->input('public_profile_base_url'),
+                        $request,
+                    );
                 }
 
                 return response()->json([
@@ -172,6 +181,43 @@ class IndustrySurveyController extends Controller
             Log::error('Error submitting industry survey: ' . $e->getMessage(), ['user_id' => $userId]);
             return response()->json(['error' => 'Internal Server Error'], 500);
         }
+    }
+
+    /**
+     * Store a business photo before the survey is submitted.
+     *
+     * The returned relative path is saved in form_data and can safely be used
+     * by the public profile page through the existing /api/uploads/{path}
+     * route. Files are assigned a server-generated name, never the original
+     * client filename.
+     */
+    public function uploadPhoto(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'photo' => 'required|image|mimes:jpeg,jpg,png,gif,webp|max:10240',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => 'Please choose an image no larger than 10 MB (JPG, PNG, GIF, or WebP).',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $photo = $request->file('photo');
+        $directory = public_path('uploads/industry-survey');
+        if (!is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = (string) Str::uuid() . '.' . strtolower($photo->getClientOriginalExtension());
+        $photo->move($directory, $filename);
+        $path = 'industry-survey/' . $filename;
+
+        return response()->json([
+            'path' => $path,
+            'url' => '/api/uploads/' . $path,
+        ], 201);
     }
 
     /**
@@ -547,11 +593,13 @@ class IndustrySurveyController extends Controller
         return null;
     }
 
-    /**
-     * Send SMS with the public business profile link and QR download link
-     * after a survey is successfully submitted.
-     */
-    private function sendBusinessProfileSms(IndustrySurvey $survey, array $formData): void
+    /** Send the registration number and public profile link after submission. */
+    private function sendBusinessProfileSms(
+        IndustrySurvey $survey,
+        array $formData,
+        ?string $submittedPublicBaseUrl,
+        Request $request,
+    ): void
     {
         try {
             $fv = $formData['formValues'] ?? $formData;
@@ -567,17 +615,19 @@ class IndustrySurveyController extends Controller
                 return;
             }
 
-            $frontendUrl = env('FRONTEND_URL', 'https://ceystem.com');
+            // Prefer the public origin of the browser that submitted this
+            // questionnaire. If it is unavailable, use the actual request
+            // host rather than a hard-coded domain.
+            $frontendUrl = rtrim($submittedPublicBaseUrl ?: $request->getSchemeAndHttpHost(), '/');
             $profileLink = $frontendUrl . '/business/' . urlencode($regNumber);
-            $qrLink = $frontendUrl . '/business/' . urlencode($regNumber) . '/qr';
             $bName = $fv['b_name'] ?? 'Business';
 
-            $message = "Ceylonica: {$bName} ලියාපදිංචි විය!\n"
+            $message = "Ceylonica: {$bName}\n"
+                . "ලියාපදිංචිය සාර්ථකයි.\n"
                 . "ලියාපදිංචි අංකය: {$regNumber}\n"
-                . "ව්‍යාපාරය බලන්න: {$profileLink}\n"
-                . "QR බාගත: {$qrLink}";
+                . "ව්‍යාපාර පිටුව: {$profileLink}";
 
-            Http::get($apiUrl, [
+            $response = Http::timeout(15)->get($apiUrl, [
                 'username' => config('services.textware.username'),
                 'password' => config('services.textware.password'),
                 'src'      => config('services.textware.sender_id'),
@@ -586,7 +636,15 @@ class IndustrySurveyController extends Controller
                 'dr'       => 1,
             ]);
 
-            Log::info("Business profile SMS sent to {$mobile} for {$regNumber}");
+            if (!$response->successful()) {
+                Log::warning('Business profile SMS gateway request failed', [
+                    'reg_number' => $regNumber,
+                    'status' => $response->status(),
+                ]);
+                return;
+            }
+
+            Log::info('Business profile SMS sent', ['reg_number' => $regNumber]);
         } catch (\Exception $e) {
             Log::error("Failed to send business profile SMS: " . $e->getMessage());
         }

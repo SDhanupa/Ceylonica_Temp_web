@@ -39,6 +39,7 @@ Route::middleware('throttle:120,1')->group(function () {
 Route::middleware(['throttle:20,1'])->group(function () {
     Route::post('/industry-survey', [IndustrySurveyController::class, 'store']);
     Route::post('/industry-survey/generate-reg-number', [IndustrySurveyController::class, 'generateRegNumber']);
+    Route::post('/industry-survey/upload-photo', [IndustrySurveyController::class, 'uploadPhoto']);
 });
 
 // OTP routes stay outside the auth group: verifying phone ownership is a
@@ -63,5 +64,8 @@ Route::get('/uploads/{path}', function($path) {
 use App\Http\Controllers\PublicBusinessController;
 
 Route::middleware('throttle:120,1')->group(function () {
+    // Registration numbers use slash-separated parts (for example
+    // RAOPA/1341124/01), so this final route parameter must accept slashes.
+    Route::get('/public/business/{regNumber}', [PublicBusinessController::class, 'show'])->where('regNumber', '.*');
     Route::get('/public/surveys-by-ccode/{ccode}', [PublicBusinessController::class, 'byCcode']);
 });

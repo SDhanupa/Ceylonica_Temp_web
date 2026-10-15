@@ -58,27 +58,54 @@ interface PhotoUploaderProps {
 
 const PhotoUploader: React.FC<PhotoUploaderProps> = ({ fieldKey, value, multiple = false, language, onChange }) => {
   const [previews, setPreviews] = React.useState<string[]>([]);
+  const [storedPaths, setStoredPaths] = React.useState<string[]>([]);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
 
-  const handleFiles = (files: FileList | null) => {
+  const imageUrl = (path: string) => path.startsWith('data:') || path.startsWith('blob:') || path.startsWith('http')
+    ? path
+    : `/api/uploads/${path}`;
+
+  // Drafts restored from the server already contain the relative upload path.
+  React.useEffect(() => {
+    const paths = value ? value.split(', ').map(path => path.trim()).filter(Boolean) : [];
+    setStoredPaths(current => current.join(', ') === paths.join(', ') ? current : paths);
+    setPreviews(paths.map(imageUrl));
+  }, [value]);
+
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const arr = Array.from(files);
-    const names = arr.map(f => f.name).join(', ');
-    const readers = arr.map(f => new Promise<string>(resolve => {
-      const r = new FileReader();
-      r.onload = e => resolve(e.target?.result as string);
-      r.readAsDataURL(f);
-    }));
-    Promise.all(readers).then(urls => {
-      const next = multiple ? [...previews, ...urls] : urls;
-      setPreviews(next);
-      onChange(names, next);
-    });
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const uploadedPaths = await Promise.all(Array.from(files).map(async (file) => {
+        const body = new FormData();
+        body.append('photo', file);
+        const response = await fetch('/api/industry-survey/upload-photo', { method: 'POST', body });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.path) {
+          throw new Error(result?.error || 'Photo upload failed.');
+        }
+        return result.path as string;
+      }));
+
+      const nextPaths = multiple ? [...storedPaths, ...uploadedPaths] : uploadedPaths.slice(0, 1);
+      setStoredPaths(nextPaths);
+      setPreviews(nextPaths.map(imageUrl));
+      onChange(nextPaths.join(', '));
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const removePreview = (idx: number) => {
-    const next = previews.filter((_, i) => i !== idx);
-    setPreviews(next);
-    onChange(next.length ? `${next.length} photo(s)` : '', next);
+    const nextPaths = storedPaths.filter((_, i) => i !== idx);
+    setStoredPaths(nextPaths);
+    setPreviews(nextPaths.map(imageUrl));
+    onChange(nextPaths.join(', '));
   };
 
   return (
@@ -97,6 +124,7 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ fieldKey, value, multiple
             hidden
             accept="image/*"
             multiple={multiple}
+            disabled={uploading}
             onChange={e => handleFiles(e.target.files)}
           />
         </Button>
@@ -115,14 +143,28 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ fieldKey, value, multiple
             hidden
             accept="image/*"
             capture="environment"
+            disabled={uploading}
             onChange={e => handleFiles(e.target.files)}
           />
         </Button>
       </Box>
 
-      {value && (
+      {uploading && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <CircularProgress size={18} />
+          <Typography variant="caption">{language === 'si' ? 'ඡායාරූපය උඩුගත කරමින්...' : language === 'ta' ? 'புகைப்படம் பதிவேற்றப்படுகிறது...' : 'Uploading photo...'}</Typography>
+        </Box>
+      )}
+
+      {uploadError && (
+        <Typography variant="caption" color="error" sx={{ display: 'block', mb: 1 }}>
+          {uploadError}
+        </Typography>
+      )}
+
+      {value && !uploading && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontStyle: 'italic' }}>
-          {value}
+          {language === 'si' ? 'ඡායාරූපය උඩුගත කර ඇත' : language === 'ta' ? 'புகைப்படம் பதிவேற்றப்பட்டது' : 'Photo uploaded'}
         </Typography>
       )}
 
@@ -1098,6 +1140,9 @@ const IndustrySurveyPage: React.FC = () => {
         },
       },
       mobile_verification_token: mobileVerificationToken,
+      // The backend uses this real browser origin to form the public profile
+      // link that is sent by SMS after the OTP-verified submission succeeds.
+      public_profile_base_url: window.location.origin,
     };
     if (existingId) {
       payload.id = parseInt(existingId, 10);
@@ -1131,10 +1176,12 @@ const IndustrySurveyPage: React.FC = () => {
         return;
       }
 
+      const saved = await response.json().catch(() => null);
+      const publishedRegNumber = saved?.survey?.reg_number || regNumber;
       setSubmitSuccessData({
         startTime: surveyStartTime?.toLocaleTimeString() || '',
         endTime: endTime.toLocaleTimeString(),
-        regNumber,
+        regNumber: publishedRegNumber,
       });
       setSuccessDialogOpen(true);
 
@@ -1595,7 +1642,7 @@ const IndustrySurveyPage: React.FC = () => {
       )}
 
       {/* Success Dialog */}
-      <Dialog PaperProps={dialogPaperProps} open={successDialogOpen} onClose={() => { setSuccessDialogOpen(false); navigate('/fill-data'); }} maxWidth="sm" fullWidth>
+      <Dialog PaperProps={dialogPaperProps} open={successDialogOpen} onClose={() => { setSuccessDialogOpen(false); navigate('/gnpage'); }} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 'bold', color: 'success.main', display: 'flex', alignItems: 'center', gap: 1 }}>
           {language === 'si' ? 'සාර්ථකයි!' : language === 'ta' ? 'வெற்றி!' : 'Success!'}
         </DialogTitle>
@@ -1606,6 +1653,9 @@ const IndustrySurveyPage: React.FC = () => {
           {submitSuccessData && (
             <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 2 }}>
               <Typography variant="body2" mb={1}>
+                <strong>{language === 'si' ? 'ලියාපදිංචි අංකය:' : language === 'ta' ? 'பதிவு எண்:' : 'Registration number:'}</strong> {submitSuccessData.regNumber}
+              </Typography>
+              <Typography variant="body2" mb={1}>
                 <strong>{language === 'si' ? 'ආරම්භක වේලාව:' : language === 'ta' ? 'தொடக்க நேரம்:' : 'Start Time:'}</strong> {submitSuccessData.startTime}
               </Typography>
               <Typography variant="body2">
@@ -1614,8 +1664,13 @@ const IndustrySurveyPage: React.FC = () => {
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button variant="contained" color="success" onClick={() => { setSuccessDialogOpen(false); navigate('/fill-data'); }}>
+        <DialogActions sx={{ p: 2, pt: 0, gap: 1, flexWrap: 'wrap' }}>
+          {submitSuccessData?.regNumber && (
+            <Button variant="contained" color="success" onClick={() => { setSuccessDialogOpen(false); navigate(`/business/${encodeURIComponent(submitSuccessData.regNumber)}`); }}>
+              {language === 'si' ? 'ව්‍යාපාර පිටුව බලන්න' : language === 'ta' ? 'வணிகப் பக்கத்தைப் பார்க்க' : 'View business page'}
+            </Button>
+          )}
+          <Button variant="outlined" onClick={() => { setSuccessDialogOpen(false); navigate('/gnpage'); }}>
             {language === 'si' ? 'හරි' : language === 'ta' ? 'சரி' : 'OK'}
           </Button>
         </DialogActions>
