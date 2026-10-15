@@ -13,6 +13,7 @@ import { GET_GN_LABEL_BY_COORDINATES, GET_P_DISTRICTS, GET_P_DISTRICT_GN_OPTIONS
 import { getUserName, setUserName } from '../utils/cookieUtils';
 import { useLanguage } from '../context/LanguageContext';
 import { C } from './fruit/tokens';
+import { buildDsDivisions } from '../utils/dsDivisions';
 
 interface Props {
   open: boolean;
@@ -131,17 +132,7 @@ const GnLocationModal: React.FC<Props> = ({ open, onClose, onLocationSelected })
   );
   const gnRows: any[] = gnData?.pDistrict?.gramaNiladharis || [];
 
-  const dsOptions = useMemo(() => {
-    const map = new Map<string, any>();
-    gnRows.forEach((gn: any) => {
-      const code = gn.divisionalSecretariatCode || gn.dsEn;
-      if (!code) return;
-      const existing = map.get(code);
-      if (!existing) map.set(code, { code, dsEn: gn.dsEn || code, dsSi: gn.dsSi, dsTa: gn.dsTa });
-      else { existing.dsSi ||= gn.dsSi; existing.dsTa ||= gn.dsTa; }
-    });
-    return Array.from(map.values()).sort((a, b) => String(a.dsEn).localeCompare(String(b.dsEn)));
-  }, [gnRows]);
+  const dsOptions = useMemo(() => buildDsDivisions(gnRows), [gnRows]);
 
   const gnOptions = useMemo(
     () => (selectedCity ? gnRows.filter((g: any) => (g.divisionalSecretariatCode || g.dsEn) === selectedCity) : [])
@@ -376,7 +367,7 @@ const GnLocationModal: React.FC<Props> = ({ open, onClose, onLocationSelected })
                   <Typography sx={{ px: 2, pt: 1.5, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: ACCENT }}>{t.found}</Typography>
                   {[
                     [t.gn, `${gnLabel(activeGn)} (${activeGn.CCODE})`],
-                    [t.ds, pick(activeGn, 'dsEn', 'dsSi', 'dsTa')],
+                    [t.ds, dsLabel(dsOptions.find(ds => ds.code === (activeGn.divisionalSecretariatCode || activeGn.dsEn)) || activeGn)],
                     [t.district, disLabelOfGn(activeGn)],
                   ].map(([k, v], i) => (
                     <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, px: 2, py: 1.25, borderTop: i ? `1px solid ${LINE}` : 'none' }}>
