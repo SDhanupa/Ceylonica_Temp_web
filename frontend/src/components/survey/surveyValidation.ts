@@ -289,22 +289,30 @@ const FIELD_RULES: Record<string, (c: Ctx) => void> = {
 export function getStepErrors(step: number, fv: FormValues, L: Translate, dynamicKeys?: string[]): Errors {
   const e: Errors = {};
 
+  // Only Basic Information is compulsory. Every later section is optional so a
+  // respondent can continue even when a particular question does not apply.
+  // Values that are supplied are still checked for a valid number, NIC, phone
+  // number, email address, and so on.
+  const optionalStep = step > 0;
+
   const REQ = L('This field is required', 'මෙම ක්ෂේත්‍රය අවශ්‍යයි', 'இந்த புலம் தேவை');
   const SEL = L('Please select an option', 'කරුණාකර විකල්පයක් තෝරන්න', 'ஒரு விருப்பத்தைத் தேர்ந்தெடுக்கவும்');
   const PICK = L('Select at least one option', 'අවම වශයෙන් එකක් තෝරන්න', 'குறைந்தது ஒன்றைத் தேர்ந்தெடுக்கவும்');
   const NUM = L('Enter a valid number', 'වලංගු අංකයක් ඇතුළත් කරන්න', 'சரியான எண்ணை உள்ளிடவும்');
   const WHOLE = L('Enter a whole number (0 or more)', 'නිඛිල සංඛ්‍යාවක් ඇතුළත් කරන්න (0 හෝ වැඩි)', 'முழு எண்ணை உள்ளிடவும்');
 
-  const req = (id: string, msg = REQ) => { if (isBlank(fv[id])) e[id] = msg; };
-  const pick = (id: string) => { if (isBlank(fv[id]) || fv[id].split(', ').filter(Boolean).length === 0) e[id] = PICK; };
+  const req = (id: string, msg = REQ) => { if (!optionalStep && isBlank(fv[id])) e[id] = msg; };
+  const pick = (id: string) => {
+    if (!optionalStep && (isBlank(fv[id]) || fv[id].split(', ').filter(Boolean).length === 0)) e[id] = PICK;
+  };
   const count = (id: string, required = false) => {
     const val = fv[id];
-    if (isBlank(val)) { if (required) e[id] = REQ; return; }
+    if (isBlank(val)) { if (required && !optionalStep) e[id] = REQ; return; }
     if (!isCount(val)) e[id] = WHOLE;
   };
   const numRange = (id: string, min: number, max: number, required = false) => {
     const val = fv[id];
-    if (isBlank(val)) { if (required) e[id] = REQ; return; }
+    if (isBlank(val)) { if (required && !optionalStep) e[id] = REQ; return; }
     const n = asNumber(val);
     if (!isFinite(n)) e[id] = NUM;
     else if (n < min || n > max) e[id] = L(`Enter a value between ${min} and ${max}`, `${min} සහ ${max} අතර අගයක් ඇතුළත් කරන්න`, `${min} முதல் ${max} வரை உள்ளிடவும்`);
@@ -337,10 +345,8 @@ export function getStepErrors(step: number, fv: FormValues, L: Translate, dynami
     case 1: {
       req('q_owner_name');
       req('q_gender', SEL);
-      if (isBlank(fv['q_nic'])) e['q_nic'] = REQ;
-      else if (!isValidNIC(fv['q_nic'])) e['q_nic'] = L('Enter a valid NIC number', 'වලංගු ජා.හැ. අංකයක් ඇතුළත් කරන්න', 'சரியான தேசிய அடையாள எண்ணை உள்ளிடவும்');
-      if (isBlank(fv['q_mobile'])) e['q_mobile'] = REQ;
-      else if (!isValidPhone(fv['q_mobile'])) e['q_mobile'] = L('Enter a valid phone number', 'වලංගු දුරකථන අංකයක් ඇතුළත් කරන්න', 'சரியான தொலைபேசி எண்ணை உள்ளிடவும்');
+      if (!isBlank(fv['q_nic']) && !isValidNIC(fv['q_nic'])) e['q_nic'] = L('Enter a valid NIC number', 'වලංගු ජා.හැ. අංකයක් ඇතුළත් කරන්න', 'சரியான தேசிய அடையாள எண்ணை உள்ளிடவும்');
+      if (!isBlank(fv['q_mobile']) && !isValidPhone(fv['q_mobile'])) e['q_mobile'] = L('Enter a valid phone number', 'වලංගු දුරකථන අංකයක් ඇතුළත් කරන්න', 'சரியான தொலைபேசி எண்ணை உள்ளிடவும்');
       if (!isBlank(fv['q_whatsapp']) && !isValidPhone(fv['q_whatsapp'])) e['q_whatsapp'] = L('Enter a valid phone number', 'වලංගු දුරකථන අංකයක් ඇතුළත් කරන්න', 'சரியான தொலைபேசி எண்ணை உள்ளிடவும்');
       if (!isBlank(fv['q_email']) && !isValidEmail(fv['q_email'])) e['q_email'] = L('Enter a valid email address', 'වලංගු විද්‍යුත් තැපෑලක් ඇතුළත් කරන්න', 'சரியான மின்னஞ்சலை உள்ளிடவும்');
       req('q_education', SEL);

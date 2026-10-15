@@ -30,6 +30,10 @@ services:
       context: ./backend
     container_name: celonica-portal-api
     restart: unless-stopped
+    # Contains local-only secrets, including the TextWare password. This file
+    # is ignored by Git and is never copied into source control.
+    env_file:
+      - ./backend/.env
     environment:
       - APP_NAME=Celonica Admin
       - APP_ENV=${APP_ENV:-production}
@@ -55,10 +59,6 @@ services:
       - REDIS_PASSWORD=null
       - REDIS_PORT=6379
       - QUEUE_CONNECTION=sync
-      - TEXTWARE_USERNAME=${TEXTWARE_USERNAME:-}
-      - TEXTWARE_PASSWORD=${TEXTWARE_PASSWORD:-}
-      - TEXTWARE_SENDER_ID=${TEXTWARE_SENDER_ID:-}
-      - TEXTWARE_API_URL=${TEXTWARE_API_URL:-}
     volumes:
       # The main app's uploaded files, served by /api/uploads/{path}.
       - main_uploads:/var/www/public/uploads:ro

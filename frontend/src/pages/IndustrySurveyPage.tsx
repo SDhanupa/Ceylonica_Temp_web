@@ -21,7 +21,7 @@ import {
 } from '../components/survey/SurveyKit';
 import SurveyProgress, { SurveySection } from '../components/survey/SurveyProgress';
 import {
-  extractNICDetails, getStepErrors, getFirstInvalidStep, isDynamicStep, TOTAL_STEPS,
+  extractNICDetails, getStepErrors, getFirstInvalidStep, isDynamicStep, DYNAMIC_STEPS, TOTAL_STEPS,
 } from '../components/survey/surveyValidation';
 import { DYNAMIC_STEP_TITLES } from '../components/survey/surveySteps';
 
@@ -44,7 +44,6 @@ import RocketLaunchOutlinedIcon from '@mui/icons-material/RocketLaunchOutlined';
 /* UI icons */
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import BookmarkAddOutlinedIcon from '@mui/icons-material/BookmarkAddOutlined';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 
@@ -220,6 +219,7 @@ const DynamicQuestionRenderer: React.FC<DynamicQuestionRendererProps> = ({ quest
       case 'text':
       case 'email':
       case 'tel':
+      case 'date':
         return <SText value={val} onChange={set} type={question.type} inputMode={question.type === 'tel' ? 'tel' : undefined} />;
       case 'number':
         return <SText value={val} onChange={set} type="number" inputMode="numeric" />;
@@ -400,6 +400,37 @@ const IndustrySurveyPage: React.FC = () => {
      and this page can never disagree about what a step is called. */
   const stepTitles: Record<number, any> = DYNAMIC_STEP_TITLES;
 
+  /* Only show DB-driven sections that actually have configured questions.
+     Steps 0 and 1 are always present because they are rendered locally. This
+     prevents respondents from reaching an empty section when a later survey
+     section has not yet been configured in the question builder. */
+  const activeStepIndexes = React.useMemo(() => {
+    // Keep the complete sequence while the request is in flight so a saved
+    // draft can be restored without a transient invalid step index.
+    if (loadingDynamicQuestions) return [0, 1, ...DYNAMIC_STEPS];
+
+    const configuredSteps = new Set(dynamicQuestions.map((question) => question.step_index));
+    return [0, 1, ...DYNAMIC_STEPS.filter((step) => configuredSteps.has(step))];
+  }, [dynamicQuestions, loadingDynamicQuestions]);
+
+  const previousActiveStep = React.useCallback(
+    (step: number) => {
+      const position = activeStepIndexes.indexOf(step);
+      return position > 0 ? activeStepIndexes[position - 1] : undefined;
+    },
+    [activeStepIndexes],
+  );
+
+  const nextActiveStep = React.useCallback(
+    (step: number) => {
+      const position = activeStepIndexes.indexOf(step);
+      return position >= 0 && position < activeStepIndexes.length - 1
+        ? activeStepIndexes[position + 1]
+        : undefined;
+    },
+    [activeStepIndexes],
+  );
+
   /* ── Localisation helper ─────────────────────────────────────────────────── */
   const L = React.useCallback(
     (en: string, si: string, ta?: string) => (language === 'si' ? si : language === 'ta' ? (ta || en) : en),
@@ -412,7 +443,7 @@ const IndustrySurveyPage: React.FC = () => {
       const fromTitles = stepTitles[i];
       return fromTitles ? (language === 'si' ? fromTitles.si : language === 'ta' ? fromTitles.ta : fromTitles.en) : L(en, si, ta);
     };
-    return [
+    const allSections = [
       { icon: <StorefrontOutlinedIcon />, title: t(0, 'Basic Information', 'මූලික තොරතුරු', 'அடிப்படை தகவல்கள்'), short: L('Basics', 'මූලික', 'அடிப்படை') },
       { icon: <PersonOutlineRoundedIcon />, title: t(1, 'Business Owner', 'ව්‍යාපාර හිමිකරු', 'வணிக உரிமையாளர்'), short: L('Owner', 'හිමිකරු', 'உரிமையாளர்') },
       { icon: <GavelRoundedIcon />, title: t(2, 'Legal Status', 'නීතිමය තත්ත්වය', 'சட்ட நிலை'), short: L('Legal', 'නීතිය', 'சட்டம்') },
@@ -428,11 +459,20 @@ const IndustrySurveyPage: React.FC = () => {
       { icon: <ParkOutlinedIcon />, title: L('Environmental & Social Impact', 'පාරිසරික හා සමාජීය බලපෑම', 'சுற்றுச்சூழல் & சமூக தாக்கம்'), short: L('Impact', 'බලපෑම', 'தாக்கம்') },
       { icon: <RocketLaunchOutlinedIcon />, title: L('Future Needs & Logistics', 'අනාගත අවශ්‍යතා සහ ලොජිස්ටික්ස්', 'எதிர்கால தேவைகள் & தளவாடங்கள்'), short: L('Future', 'අනාගත', 'எதிர்காலம்') },
     ];
-  }, [language, L, dynamicQuestions]);
+    return allSections.filter((_, stepIndex) => activeStepIndexes.includes(stepIndex));
+  }, [language, L, activeStepIndexes]);
 
   /* ── Validation state ────────────────────────────────────────────────────── */
   const [showErr, setShowErr] = useState(false);
   const [maxReached, setMaxReached] = useState(0);
+
+  /* A draft may point to a section that has subsequently been emptied in the
+     admin question builder. Return it to the closest available earlier page. */
+  useEffect(() => {
+    if (loadingDynamicQuestions || activeStepIndexes.includes(currentStep)) return;
+    const fallbackStep = [...activeStepIndexes].reverse().find((step) => step < currentStep) ?? 0;
+    setCurrentStep(fallbackStep);
+  }, [activeStepIndexes, currentStep, loadingDynamicQuestions]);
 
   /** Field keys currently rendered on a DB-driven step (after depends_on). */
   const visibleDynamicKeys = React.useCallback(
@@ -522,12 +562,7 @@ const IndustrySurveyPage: React.FC = () => {
   const renderDynamicStep = (stepIndex: number) => {
     const stepQuestions = dynamicQuestions.filter(q => q.step_index === stepIndex).sort((a, b) => a.sort_order - b.sort_order);
 
-    if (stepQuestions.length === 0) {
-      if (loadingDynamicQuestions) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
-      }
-      return <Typography>No questions found for this step.</Typography>;
-    }
+    if (stepQuestions.length === 0) return null;
 
     const titleObj = stepTitles[stepIndex];
 
@@ -548,12 +583,9 @@ const IndustrySurveyPage: React.FC = () => {
             required={requiredIds.has(q.field_key)}
           />
         ))}
-        {/* Steps 2..TOTAL_STEPS-2 chain to the next dynamic/hardcoded step;
-            the last step (TOTAL_STEPS-1) must submit instead of advancing to a
-            step that doesn't exist. */}
-        {stepIndex === TOTAL_STEPS - 1
-          ? <StepNav prev={stepIndex - 1} submit />
-          : <StepNav prev={stepIndex - 1} next={stepIndex + 1} />}
+        {nextActiveStep(stepIndex) === undefined
+          ? <StepNav prev={previousActiveStep(stepIndex)} submit />
+          : <StepNav prev={previousActiveStep(stepIndex)} next={nextActiveStep(stepIndex)} />}
       </Box>
     );
   };
@@ -916,22 +948,6 @@ const IndustrySurveyPage: React.FC = () => {
         </Button>
       </Box>
 
-      <Button
-        variant="text"
-        startIcon={<BookmarkAddOutlinedIcon />}
-        onClick={handleSaveDraft}
-        sx={{
-          alignSelf: 'center', textTransform: 'none', fontWeight: 700,
-          minHeight: 44, px: 2,
-          fontSize: '0.84rem', color: T.muted, borderRadius: `${T.field}px`,
-          WebkitTapHighlightColor: 'transparent',
-          '&:active': { bgcolor: T.brandSoft },
-          '@media (hover: hover)': { '&:hover': { color: T.brand, bgcolor: T.brandSoft } },
-        }}
-      >
-        {L('Save & continue later', 'සුරකින්න හා පසුව දිගටම කරන්න', 'சேமித்து பින்னர் தொடரவும்')}
-      </Button>
-
       <Dialog PaperProps={dialogPaperProps} open={duplicatePromptOpen} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CheckCircleRoundedIcon color="primary" />
@@ -1203,9 +1219,15 @@ const IndustrySurveyPage: React.FC = () => {
             >
               <SurveyProgress
                 sections={SECTIONS}
-                current={Math.min(currentStep, SECTIONS.length - 1)}
-                maxReached={maxReached}
-                onJump={goToStep}
+                current={Math.max(0, activeStepIndexes.indexOf(currentStep))}
+                maxReached={Math.max(0, activeStepIndexes.reduce(
+                  (lastReached, stepIndex, sectionIndex) => stepIndex <= maxReached ? sectionIndex : lastReached,
+                  0,
+                ))}
+                onJump={(sectionIndex) => {
+                  const stepIndex = activeStepIndexes[sectionIndex];
+                  if (stepIndex !== undefined) goToStep(stepIndex);
+                }}
               />
 
               <SurveyErrorContext.Provider value={{ show: showErr, errors: stepErrors }}>
@@ -1458,7 +1480,7 @@ const IndustrySurveyPage: React.FC = () => {
                   </Box>
 
                   <StepNav
-                    next={1}
+                    next={nextActiveStep(0)}
                     before={() => {
                       if (!formValues['q_owner_name'] && formValues['b_owner_name']) {
                         setFormValues(prev => ({ ...prev, q_owner_name: prev['b_owner_name'] }));
@@ -1538,13 +1560,13 @@ const IndustrySurveyPage: React.FC = () => {
                     <QuestionLabel fieldKey="q_education" text={getDynamicLabel('q_education', 'Highest Educational Qualification', 'උසස්ම අධ්‍යාපන සුදුසුකම', 'மிக உயர்ந்த கல்வித் தகுதி')} />
                     <FormControl fullWidth size="small">
                       <Select value={formValues['q_education'] || ''} onChange={(e) => handleInputChange('q_education', e.target.value as string)}>
-                        <MenuItem value="1. Primary">{language === 'si' ? '1. ප්‍රාථමික' : '1. Primary'}</MenuItem>
-                        <MenuItem value="2. Secondary">{language === 'si' ? '2. ද්විතීයික' : '2. Secondary'}</MenuItem>
-                        <MenuItem value="3. A-Level">{language === 'si' ? '3. උසස් පෙළ' : '3. A-Level'}</MenuItem>
-                        <MenuItem value="4. Diploma">{language === 'si' ? '4. ඩිප්ලෝමා' : '4. Diploma'}</MenuItem>
-                        <MenuItem value="5. Degree">{language === 'si' ? '5. උපාධිය' : '5. Degree'}</MenuItem>
-                        <MenuItem value="6. Postgraduate">{language === 'si' ? '6. උපාධියට වඩා ඉහළ' : '6. Postgraduate'}</MenuItem>
-                        <MenuItem value="7. No formal education">{language === 'si' ? '7. විධිමත් අධ්‍යාපනයක් නැත' : '7. No formal education'}</MenuItem>
+                        <MenuItem value="1. Primary">{language === 'si' ? '1. ප්‍රාථමික' : language === 'ta' ? '1. ஆரம்பக் கல்வி' : '1. Primary'}</MenuItem>
+                        <MenuItem value="2. Secondary">{language === 'si' ? '2. ද්විතීයික' : language === 'ta' ? '2. இடைநிலைக் கல்வி' : '2. Secondary'}</MenuItem>
+                        <MenuItem value="3. A-Level">{language === 'si' ? '3. උසස් පෙළ' : language === 'ta' ? '3. உயர்தர நிலை' : '3. A-Level'}</MenuItem>
+                        <MenuItem value="4. Diploma">{language === 'si' ? '4. ඩිප්ලෝමා' : language === 'ta' ? '4. டிப்ளோமா' : '4. Diploma'}</MenuItem>
+                        <MenuItem value="5. Degree">{language === 'si' ? '5. උපාධිය' : language === 'ta' ? '5. பட்டம்' : '5. Degree'}</MenuItem>
+                        <MenuItem value="6. Postgraduate">{language === 'si' ? '6. උපාධියට වඩා ඉහළ' : language === 'ta' ? '6. முதுநிலை' : '6. Postgraduate'}</MenuItem>
+                        <MenuItem value="7. No formal education">{language === 'si' ? '7. විධිමත් අධ්‍යාපනයක් නැත' : language === 'ta' ? '7. முறையான கல்வி இல்லை' : '7. No formal education'}</MenuItem>
                       </Select>
                     </FormControl>
                   </Box>
@@ -1559,12 +1581,12 @@ const IndustrySurveyPage: React.FC = () => {
                     <TextField fullWidth variant="outlined" size="small" value={formValues['q_prev_occupation'] || ''} onChange={(e) => handleInputChange('q_prev_occupation', e.target.value)} />
                   </Box>
 
-                  <StepNav prev={0} next={2} />
+                  <StepNav prev={previousActiveStep(1)} next={nextActiveStep(1)} />
                 </Box>
               )}
 
 
-              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].includes(currentStep) && renderDynamicStep(currentStep)}
+              {isDynamicStep(currentStep) && activeStepIndexes.includes(currentStep) && renderDynamicStep(currentStep)}
                 </Box>
               </SurveyErrorContext.Provider>
             </Box>

@@ -24,7 +24,7 @@ class BusinessSurveyQuestionController extends Controller
      * an empty gap on the form. 'custom' is reserved for the hardcoded steps 0-1,
      * whose rows exist only to carry editable labels and explanations.
      */
-    private const ALLOWED_TYPES = ['text', 'email', 'tel', 'number', 'textarea', 'select', 'multiselect', 'custom'];
+    private const ALLOWED_TYPES = ['text', 'email', 'tel', 'number', 'date', 'textarea', 'select', 'multiselect', 'custom'];
 
     /** Types that require an options list to be answerable. */
     private const CHOICE_TYPES = ['select', 'multiselect'];
