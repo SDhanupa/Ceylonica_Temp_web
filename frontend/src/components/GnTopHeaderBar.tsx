@@ -37,6 +37,8 @@ interface GnTopHeaderBarProps {
   activeCategorySlug?: string;
   onSelectCategory?: (slug: string) => void;
   onCycleLanguage?: () => void;
+  userName?: string;
+  onEditName?: () => void;
 }
 
 export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
@@ -52,6 +54,8 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
   isDarkMode = false,
   activeCategorySlug,
   onSelectCategory = () => {},
+  userName,
+  onEditName,
 }) => {
   const { language } = useLanguage();
   const theme = useTheme();
@@ -319,6 +323,61 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
               </Box>
             </Box>
           </Tooltip>
+
+          {/* User Name badge on the left side */}
+          {userName && (
+            <Tooltip title={language === 'si' ? 'නම වෙනස් කරන්න' : language === 'ta' ? 'பெயரை மாற்ற' : 'Change name'}>
+              <Box
+                onClick={onEditName}
+                sx={{
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: { xs: 0.5, md: 0.8 },
+                  px: { xs: 1, md: 1.4 },
+                  py: { xs: 0.5, md: 0.6 },
+                  minHeight: { xs: 40, md: 'auto' },
+                  borderRadius: '10px',
+                  background: isDarkMode
+                    ? 'linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(5,150,105,0.15) 100%)'
+                    : 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                  border: isDarkMode ? '1.5px solid rgba(52,211,153,0.45)' : '1.5px solid #a7f3d0',
+                  boxShadow: isDarkMode ? '0 2px 10px rgba(16,185,129,0.2)' : '0 2px 8px rgba(16,185,129,0.1)',
+                  cursor: onEditName ? 'pointer' : 'default',
+                  transition: 'all 0.2s ease',
+                  '&:hover': onEditName ? { transform: { md: 'scale(1.02)' }, borderColor: '#10b981' } : {},
+                }}
+              >
+                <Typography sx={{ fontSize: { xs: '0.95rem', md: '1.05rem' } }}>👤</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  <Typography
+                    sx={{
+                      display: { xs: 'none', md: 'block' },
+                      fontSize: '0.62rem', fontWeight: 800,
+                      color: isDarkMode ? '#6ee7b7' : '#047857',
+                      letterSpacing: '0.6px', lineHeight: 1, textTransform: 'uppercase',
+                    }}
+                  >
+                    {language === 'si' ? 'නම' : language === 'ta' ? 'பயனர்' : 'USER'}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontWeight: 800,
+                      fontSize: { xs: '0.8rem', md: '0.88rem' },
+                      color: isDarkMode ? '#ffffff' : '#065f46',
+                      lineHeight: 1.2,
+                      maxWidth: { xs: 90, md: 140 },
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {userName}
+                  </Typography>
+                </Box>
+              </Box>
+            </Tooltip>
+          )}
 
           {/* Search */}
           <Box sx={{ flex: { xs: '1 1 auto', md: '1 1 260px' }, minWidth: 0 }}>

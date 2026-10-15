@@ -65,6 +65,8 @@ interface MobileDashboardProps {
   householdHeadData?: any;
   /** Rendered prominently in the sheet, under the village identity. */
   contributeSlot?: React.ReactNode;
+  userName?: string;
+  onEditName?: () => void;
 }
 
 const MobileDashboard: React.FC<MobileDashboardProps> = (props) => {
@@ -76,6 +78,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = (props) => {
     dsDivisions, selectedCity, onCityChange,
     gramaNiladharis, selectedGN, onGNChange,
     onOpenCategory, populationData, contributeSlot,
+    userName, onEditName,
   } = props;
 
   const navigate = useNavigate();
@@ -151,9 +154,36 @@ const MobileDashboard: React.FC<MobileDashboardProps> = (props) => {
       }}>
         <Box onClick={goHome} sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
           <Box component="img" src="/logo.png" alt="Ceylonica" sx={{ height: 34, width: 34, objectFit: 'contain' }} />
-          <Typography sx={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: '1.2rem', color: textMain, letterSpacing: '-0.01em' }}>
-            Ceylonica
-          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography sx={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: '1.15rem', color: textMain, letterSpacing: '-0.01em', lineHeight: 1.1 }}>
+              Ceylonica
+            </Typography>
+            {userName && (
+              <Typography
+                onClick={(e) => {
+                  if (onEditName) {
+                    e.stopPropagation();
+                    onEditName();
+                  }
+                }}
+                sx={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  color: isDarkMode ? '#93c5fd' : '#2563eb',
+                  lineHeight: 1.1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.3,
+                  maxWidth: 120,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                👤 {userName}
+              </Typography>
+            )}
+          </Box>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>

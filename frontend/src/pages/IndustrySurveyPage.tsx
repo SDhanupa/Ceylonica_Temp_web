@@ -13,6 +13,7 @@ import { useQuery, useLazyQuery } from '@apollo/client';
 import { GET_QUESTIONS, GET_GN_BY_CCODE, GET_CATEGORIES_BY_ROOT_SLUG } from '../graphql/queries';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import LocationSelectorModal from '../components/LocationSelectorModal';
+import { getUserName } from '../utils/cookieUtils';
 
 /* ── Survey design system ─────────────────────────────────────────────────── */
 import {
@@ -267,6 +268,9 @@ const IndustrySurveyPage: React.FC = () => {
   const { gnName, ccode } = useParams<{ gnName?: string, ccode?: string }>();
   const navigate = useNavigate();
   const locationState = useLocation().state as { fromSelector?: boolean };
+  // The name is collected on the GN panel and stored in a cookie. It is the
+  // surveyor identity for this public survey, independent of login details.
+  const surveyorName = getUserName()?.trim() || 'Unknown';
 
   const { data, loading, error } = useQuery(GET_QUESTIONS, {
     fetchPolicy: 'cache-and-network',
@@ -324,7 +328,11 @@ const IndustrySurveyPage: React.FC = () => {
   const [fetchCategories, { data: catData, loading: catLoading }] = useLazyQuery(GET_CATEGORIES_BY_ROOT_SLUG, {
     fetchPolicy: 'cache-first',
   });
-  const businessCategories: any[] = catData?.categoriesByRootSlug || [];
+  // This survey's business-type list is the PDF-derived classification set.
+  // Its source "අංකය" values are preserved as dotted numeric slugs.
+  const businessCategories: any[] = (catData?.categoriesByRootSlug || []).filter(
+    (category: any) => category.slug?.startsWith('1.3.4.'),
+  );
 
   // Load categories once auth is ready
   useEffect(() => {
@@ -1068,7 +1076,7 @@ const IndustrySurveyPage: React.FC = () => {
         gpsCoordinates,
         survey_metadata: {
           date: new Date().toISOString(),
-          surveyor: userInfo?.name,
+          surveyor: surveyorName,
           startTime: surveyStartTime?.toISOString(),
           endTime: endTime.toISOString(),
         },
@@ -1149,6 +1157,7 @@ const IndustrySurveyPage: React.FC = () => {
         gramaNiladharis={mockGns}
         selectedGN={mockGns.length ? ccode : ''}
         {...{ activeCcode: ccode, activeGnObj: gnName ? { nameEn: gnName } : null }}
+        userName={getUserName() || ''}
       />
 
       <SurveyKeyframes />
@@ -1648,7 +1657,7 @@ const IndustrySurveyPage: React.FC = () => {
               <strong>{language === 'si' ? 'සමීක්ෂණ දිනය:' : 'Survey Date:'}</strong> {new Date().toLocaleDateString()}
             </Typography>
             <Typography variant="body1">
-              <strong>{language === 'si' ? 'සමීක්ෂකගේ නම:' : 'Surveyor Name:'}</strong> {userInfo?.name || 'Unknown'}
+              <strong>{language === 'si' ? 'සමීක්ෂකගේ නම:' : 'Surveyor Name:'}</strong> {surveyorName}
             </Typography>
             <Typography variant="body1">
               <strong>{language === 'si' ? 'සමීක්ෂණ ආරම්භය:' : 'Start Time:'}</strong> {language === 'si' ? 'ස්වයංක්‍රීයව' : 'Auto'} (____:____)

@@ -1,7 +1,7 @@
 // Forced reload for Vite (Fixed pie chart background and translations)
 // Forced reload for Vite (Added title glassmorphism panels back)
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Container, Grid, FormControl, useTheme, useMediaQuery, CircularProgress, Alert, Dialog, DialogContent, DialogActions, Autocomplete, TextField, IconButton, Divider, Menu, MenuItem, Fab, Fade, useScrollTrigger } from '@mui/material';
+import { Box, Typography, Button, Container, Grid, FormControl, useTheme, useMediaQuery, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, TextField, IconButton, Divider, Menu, MenuItem, Fab, Fade, useScrollTrigger } from '@mui/material';
 import { useQuery } from '@apollo/client';
 import { GET_P_DISTRICTS, GET_P_DISTRICT_WITH_GNS, GET_GN_BY_COORDINATES, GET_GN_BY_CCODE } from '../graphql/queries';
 import { useAuth } from '../auth/AuthProvider';
@@ -30,6 +30,7 @@ import ContributeBanner from '../components/contribute/ContributeBanner';
 import { useContributeCopy } from '../components/contribute/copy';
 import { saveVillage } from '../components/contribute/village';
 import { cleanMojibake } from '../utils/mojibake';
+import { getUserName, setUserName } from '../utils/cookieUtils';
 
 
 const tChart = {
@@ -173,6 +174,28 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
   const [selectedCity, setSelectedCity] = useState<string>('');
 
   const [showLocationModal, setShowLocationModal] = useState<boolean>(!ccode);
+  const [userNameState, setUserNameState] = useState<string>(() => getUserName() || '');
+  const [showNameModal, setShowNameModal] = useState<boolean>(false);
+  const [nameInput, setNameInput] = useState<string>('');
+
+  // Reactive user name check:
+  // 1. If cookie exists -> sync name to state, do not show modal.
+  // 2. If NO cookie exists:
+  //    - As soon as location modal closes (GN selected manually or auto-located via GPS), OR on direct web load with GN
+  //    -> pop up the name modal asking for ඔබගේ නම!
+  useEffect(() => {
+    const saved = getUserName();
+    if (saved) {
+      setUserNameState(saved);
+      setShowNameModal(false);
+    } else {
+      // If there are no cookies left to fetch name:
+      // When location modal is not open (either GN selected, GPS auto-located, or web loaded directly with location):
+      if (!showLocationModal) {
+        setShowNameModal(true);
+      }
+    }
+  }, [showLocationModal, ccode]);
   const t = tChart[language] || tChart.en;
   const [showManualForm, setShowManualForm] = useState(!ccode && !window.matchMedia('(max-width: 600px)').matches);
   const canContinue = !showManualForm
@@ -369,12 +392,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
     }
   }, [activeGn, selectedGN, gnData, navigate]);
 
-  // Ensure modals close when URL params are present
+  // Ensure modals close when URL params or auto-located GPS GN is present
   useEffect(() => {
-    if (ccode) {
+    if (ccode || (activeGn && !showManualForm)) {
       setShowLocationModal(false);
     }
-  }, [ccode]);
+  }, [ccode, activeGn, showManualForm]);
 
 
   // Compute display names for District, City, and GN Division
@@ -842,9 +865,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
               if (!showManualForm && activeGn) {
                 loadedGn = activeGn;
               } else if (showManualForm && selectedGN && gnData?.pDistrict?.gramaNiladharis) {
-                loadedGn = gnData.pDistrict.gramaNiladharis.find((x: any) => x.id === selectedGN);
+                loadedGn = gnData.pDistrict.gramaNiladharis.find((x: any) => String(x.id) === String(selectedGN) || x.CCODE === selectedGN || x.ccode === selectedGN);
               }
               setShowLocationModal(false);
+
+              // If user has no saved name in cookie, ask one time
+              const savedUser = getUserName();
+              if (!savedUser) {
+                setNameInput('');
+                setShowNameModal(true);
+              }
+
               if (loadedGn && loadedGn.CCODE && loadedGn.nameEn) {
                 navigate(`/gnpage/${encodeURIComponent(loadedGn.nameEn.replace(/ /g, '-'))}/${encodeURIComponent(loadedGn.CCODE)}`);
               }
@@ -864,7 +895,114 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
               transition: 'all 0.25s',
             }}
           >
-            {language === 'en' ? 'Continue' : language === 'si' ? 'ඉදිරියට' : 'தொடரவும்'}
+            {language === 'en' ? 'Continue' : language === 'si' ? 'ඉදිරියට' : 'தொடරவும்'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Name Input Modal (asks name after location selection or on web load if no cookies exist) */}
+      <Dialog
+        open={showNameModal}
+        onClose={() => {}}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          backdrop: {
+            sx: {
+              backdropFilter: 'blur(10px)',
+              bgcolor: 'rgba(15,23,42,0.6)',
+            }
+          }
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: '24px',
+            p: 1.5,
+            bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
+            color: isDarkMode ? '#f8fafc' : '#0f172a',
+            boxShadow: '0 25px 70px rgba(0,0,0,0.3)',
+            border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.06)',
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: isDarkMode ? '#f8fafc' : '#0f172a', display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: isDarkMode ? 'rgba(37,99,235,0.25)' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', color: '#2563eb' }}>
+            👤
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.2, color: isDarkMode ? '#f8fafc' : '#0f172a' }}>
+              {language === 'si' ? 'ඔබගේ නම' : language === 'ta' ? 'உங்கள் பெயர்' : 'Your Name'}
+            </Typography>
+            <Typography variant="caption" sx={{ color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+              {language === 'si' ? 'ස්ථානය තහවුරු විය. කරුණාකර ඔබගේ නම ඇතුළත් කරන්න:' : language === 'ta' ? 'உங்கள் பெயரை உள்ளிடவும்:' : 'Location confirmed. Please enter your name:'}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1.5 }}>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            variant="outlined"
+            placeholder={language === 'si' ? 'නම ඇතුළත් කරන්න...' : language === 'ta' ? 'பெயரை உள்ளிடவும்...' : 'Enter your name...'}
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const trimmed = nameInput.trim();
+                const toSave = trimmed || (language === 'si' ? 'නොදන්නා' : 'Unknown');
+                setUserName(toSave);
+                setUserNameState(toSave);
+                setShowNameModal(false);
+              }
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: '12px',
+                bgcolor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#ffffff',
+                color: isDarkMode ? '#f8fafc' : '#0f172a',
+                '& fieldset': {
+                  borderColor: isDarkMode ? 'rgba(255,255,255,0.15)' : '#cbd5e1'
+                },
+                '&.Mui-focused fieldset': { borderColor: '#2563eb' }
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0, gap: 1, justifyContent: 'space-between' }}>
+          <Button
+            variant="text"
+            color="inherit"
+            onClick={() => {
+              const fallback = language === 'si' ? 'නොදන්නා' : 'Unknown';
+              setUserName(fallback);
+              setUserNameState(fallback);
+              setShowNameModal(false);
+            }}
+            sx={{ textTransform: 'none', color: isDarkMode ? '#94a3b8' : 'text.secondary', fontWeight: 600 }}
+          >
+            {language === 'si' ? 'මඟහරින්න (Skip)' : language === 'ta' ? 'தவிர்க்க' : 'Skip'}
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              const trimmed = nameInput.trim();
+              const toSave = trimmed || (language === 'si' ? 'නොදන්නා' : 'Unknown');
+              setUserName(toSave);
+              setUserNameState(toSave);
+              setShowNameModal(false);
+            }}
+            sx={{
+              textTransform: 'none',
+              borderRadius: '10px',
+              fontWeight: 700,
+              bgcolor: '#2563eb',
+              px: 3,
+              '&:hover': { bgcolor: '#1d4ed8' }
+            }}
+          >
+            {language === 'si' ? 'සුරකින්න' : language === 'ta' ? 'சேமிக்க' : 'Save'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -915,6 +1053,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
           roofData={roofData}
           religionData={religionData}
           householdHeadData={householdHeadData}
+          userName={userNameState}
+          onEditName={() => {
+            setNameInput(userNameState === 'Guest' || userNameState === 'Unknown' || userNameState === 'නොදන්නා' ? '' : userNameState);
+            setShowNameModal(true);
+          }}
           contributeSlot={
             <ContributeBanner
               compact
@@ -984,6 +1127,46 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
               Ceylonica
             </Typography>
           </Box>
+
+          {/* User Name Badge on Left Side */}
+          {userNameState && (
+            <Tooltip title={language === 'si' ? 'නම වෙනස් කිරීමට ක්ලික් කරන්න' : 'Click to edit name'}>
+              <Box
+                onClick={() => {
+                  setNameInput(userNameState === 'Guest' || userNameState === 'Unknown' || userNameState === 'නොදන්නා' ? '' : userNameState);
+                  setShowNameModal(true);
+                }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.8,
+                  bgcolor: isDarkMode ? 'rgba(37,99,235,0.2)' : '#eff6ff',
+                  border: isDarkMode ? '1.5px solid rgba(96,165,250,0.4)' : '1.5px solid #bfdbfe',
+                  borderRadius: '10px',
+                  px: 1.4,
+                  py: 0.45,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    bgcolor: isDarkMode ? 'rgba(37,99,235,0.3)' : '#dbeafe',
+                    borderColor: '#2563eb',
+                    transform: 'translateY(-1px)'
+                  }
+                }}
+              >
+                <Typography sx={{ fontSize: '0.85rem' }}>👤</Typography>
+                <Typography
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    color: isDarkMode ? '#93c5fd' : '#1d4ed8'
+                  }}
+                >
+                  {userNameState}
+                </Typography>
+              </Box>
+            </Tooltip>
+          )}
 
           {/* Center nav links — flat text buttons, no dividers */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -1138,6 +1321,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
               const tGn = (displayGN || activeGn?.nameEn || gnName || 'GN-Name').replace(/ /g, '-');
               const tCc = displayCCODE || activeGn?.CCODE || ccode || selectedGN || 'AREA-CODE';
               navigate(`/gnpage/${encodeURIComponent(tGn)}/${encodeURIComponent(tCc)}/${slug}`);
+            }}
+            userName={userNameState}
+            onEditName={() => {
+              setNameInput(userNameState === 'Guest' || userNameState === 'Unknown' || userNameState === 'නොදන්නා' ? '' : userNameState);
+              setShowNameModal(true);
             }}
           />
 
