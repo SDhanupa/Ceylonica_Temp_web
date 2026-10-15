@@ -229,7 +229,7 @@ const GnLocationModal: React.FC<Props> = ({ open, onClose, onLocationSelected })
               ) : location ? (
                 <Box sx={{ p: 2, bgcolor: 'rgba(0,168,255,0.1)', borderRadius: 2 }}>
                   <Typography variant="body2" color="text.secondary">
-                    {language === 'si' ? '좌표' : 'Coordinates'}: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                    {language === 'si' ? 'ඛණ්ඩාංක' : language === 'ta' ? 'ஆயத்தொலைவுகள்' : 'Coordinates'}: {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
                   </Typography>
                   {autoGnLoading ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>

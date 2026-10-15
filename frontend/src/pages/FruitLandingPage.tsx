@@ -8,7 +8,6 @@ import ConfirmationNumberRoundedIcon from '@mui/icons-material/ConfirmationNumbe
 import TranslateRoundedIcon from '@mui/icons-material/TranslateRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import HolidayVillageRoundedIcon from '@mui/icons-material/HolidayVillageRounded';
-import MailOutlineRoundedIcon from '@mui/icons-material/MailOutlineRounded';
 import { useLanguage } from '../context/LanguageContext';
 import { getUserName, setUserName } from '../utils/cookieUtils';
 import GnLocationModal from '../components/GnLocationModal';
@@ -20,6 +19,8 @@ import StartSurveyDialog, { primaryCtaSx } from '../components/fruit/StartSurvey
 import AreaPickerDialog, { AreaOption } from '../components/fruit/AreaPickerDialog';
 import { FruitIcon } from '../components/fruit/FruitIcons';
 import BusinessSections from '../components/fruit/BusinessSections';
+import { HeaderPartnerLogos } from '../components/fruit/PartnerLogos';
+import LandingFooter from '../components/fruit/LandingFooter';
 import { FruitTile, LanguageSwitch, TypeRow } from '../components/fruit/LandingParts';
 import { COPY } from '../components/fruit/landingCopy';
 import { C, displayFont, displayLeading, focusRing } from '../components/fruit/tokens';
@@ -141,7 +142,8 @@ const FruitLandingPage: React.FC = () => {
         component="header"
         sx={{
           position: 'sticky', top: 0, zIndex: 30,
-          bgcolor: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(10px)', borderBottom: `1px solid ${C.line}`,
+          // Opaque so the white-backed partner JPEGs never show as boxes over dark sections.
+          bgcolor: '#FFFFFF', borderBottom: `1px solid ${C.line}`,
         }}
       >
         <Container maxWidth="lg" sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, minHeight: 64, px: { xs: 2, sm: 3 } }}>
@@ -158,6 +160,7 @@ const FruitLandingPage: React.FC = () => {
               Ceylonica
             </Typography>
           </ButtonBase>
+          <HeaderPartnerLogos />
           <Box sx={{ flex: 1 }} />
           <LanguageSwitch value={lang} onChange={setLanguage} />
           <Button
@@ -370,26 +373,7 @@ const FruitLandingPage: React.FC = () => {
         </Box>
       </Box>
 
-      {/* ── Footer ── */}
-      <Box component="footer" sx={{ bgcolor: '#0A2A17', color: C.onDarkMuted, pt: 4, pb: { xs: 'calc(104px + env(safe-area-inset-bottom))', md: 4 } }}>
-        <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 }, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, alignItems: { sm: 'center' }, justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box component="img" src="/logo.png" alt="" sx={{ width: 32, height: 32, objectFit: 'contain' }} />
-            <Typography sx={{ fontFamily: "'Gemunu Libre', sans-serif", fontWeight: 800, fontSize: '1.35rem', color: C.onDark }}>Ceylonica</Typography>
-          </Box>
-          <Box
-            component="a"
-            href="mailto:cdicceylon@gmail.com"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, minHeight: 44, color: C.onDark, textDecoration: 'none', fontWeight: 600, borderRadius: '8px', '&:hover': { textDecoration: 'underline' }, ...focusRing }}
-          >
-            <MailOutlineRoundedIcon aria-hidden sx={{ color: C.mango }} />
-            <span>{copy.footerContact}: cdicceylon@gmail.com</span>
-          </Box>
-        </Container>
-        <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 }, mt: 2.5, pt: 2.5, borderTop: '1px solid rgba(255,255,255,0.12)' }}>
-          <Typography sx={{ fontSize: '0.85rem', color: C.onDarkMuted }}>{copy.footerRights}</Typography>
-        </Container>
-      </Box>
+      <LandingFooter lang={lang} copy={copy} onStart={() => openStart(null)} onFind={goToFinder} />
 
       {/* ── Mobile sticky CTA ── */}
       <Box
