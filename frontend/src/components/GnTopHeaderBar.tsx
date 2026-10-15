@@ -39,6 +39,7 @@ interface GnTopHeaderBarProps {
   onCycleLanguage?: () => void;
   userName?: string;
   onEditName?: () => void;
+  hideCategoryRail?: boolean;
 }
 
 export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
@@ -56,6 +57,7 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
   onSelectCategory = () => {},
   userName,
   onEditName,
+  hideCategoryRail = false,
 }) => {
   const { language } = useLanguage();
   const theme = useTheme();
@@ -414,6 +416,7 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
           )}
         </Box>
 
+        {!hideCategoryRail && (<>
         <Box sx={{ height: '1px', bgcolor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)' }} />
 
         {/* ── ROW 2: category rail (scrolls) + pinned Home ── */}
@@ -515,6 +518,7 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
             </Tooltip>
           </Box>
         </Box>
+        </>)}
       </Box>
 
       {/* ── Mobile location filters: bottom sheet ──────────────────────────── */}

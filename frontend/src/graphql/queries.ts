@@ -1139,3 +1139,60 @@ export const GET_CATEGORIES_BY_ROOT_SLUG = gql`
     }
   }
 `;
+
+const GN_LABEL_FIELDS = `
+  id
+  CCODE
+  nameEn
+  nameSi
+  nameTa
+  dsEn
+  dsSi
+  dsTa
+  disEn
+  disSi
+  disTa
+  divisionalSecretariatCode
+  pDistrict {
+    id
+    admin2NameEn
+  }
+`;
+
+/** Names only — for headers that must not pull boundaries or census tables. */
+export const GET_GN_LABEL_BY_CCODE = gql`
+  query GetGnLabelByCcode($CCODE: String!) {
+    gnByCcode(CCODE: $CCODE) {
+      ${GN_LABEL_FIELDS}
+    }
+  }
+`;
+
+export const GET_GN_LABEL_BY_COORDINATES = gql`
+  query GetGnLabelByCoordinates($lat: Float!, $lng: Float!) {
+    gnByCoordinates(lat: $lat, lng: $lng) {
+      ${GN_LABEL_FIELDS}
+    }
+  }
+`;
+
+/** GN options for a district — the location dropdowns need names only, not census tables. */
+export const GET_P_DISTRICT_GN_OPTIONS = gql`
+  query GetPDistrictGnOptions($id: ID!) {
+    pDistrict(id: $id) {
+      id
+      gramaNiladharis {
+        id
+        code
+        CCODE
+        nameEn
+        nameSi
+        nameTa
+        dsEn
+        dsSi
+        dsTa
+        divisionalSecretariatCode
+      }
+    }
+  }
+`;
