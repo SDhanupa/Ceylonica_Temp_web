@@ -40,6 +40,7 @@ interface GnTopHeaderBarProps {
   userName?: string;
   onEditName?: () => void;
   hideCategoryRail?: boolean;
+  hideSearch?: boolean;
 }
 
 export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
@@ -58,6 +59,7 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
   userName,
   onEditName,
   hideCategoryRail = false,
+  hideSearch = false,
 }) => {
   const { language } = useLanguage();
   const theme = useTheme();
@@ -382,9 +384,13 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
           )}
 
           {/* Search */}
-          <Box sx={{ flex: { xs: '1 1 auto', md: '1 1 260px' }, minWidth: 0 }}>
-            <GlobalSearchBar isDarkMode={isDarkMode} activeGn={activeGnObj ? { nameEn: activeGnObj.nameEn, CCODE: activeCcode } : null} language={language} />
-          </Box>
+          {hideSearch ? (
+            <Box sx={{ flex: 1, minWidth: 0 }} />
+          ) : (
+            <Box sx={{ flex: { xs: '1 1 auto', md: '1 1 260px' }, minWidth: 0 }}>
+              <GlobalSearchBar isDarkMode={isDarkMode} activeGn={activeGnObj ? { nameEn: activeGnObj.nameEn, CCODE: activeCcode } : null} language={language} />
+            </Box>
+          )}
 
           {isMobile ? (
             /* One 44px control opens the location filters, instead of three

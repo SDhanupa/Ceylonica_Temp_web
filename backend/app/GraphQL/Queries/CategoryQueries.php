@@ -3,6 +3,7 @@
 namespace App\GraphQL\Queries;
 
 use App\Models\Category;
+use Illuminate\Support\Facades\Cache;
 use GraphQL\Type\Definition\ResolveInfo;
 use Nuwave\Lighthouse\Support\Contracts\GraphQLContext;
 
@@ -26,15 +27,25 @@ class CategoryQueries
     public function categoriesByRootSlug($rootValue, array $args, GraphQLContext $context, ResolveInfo $resolveInfo)
     {
         $rootSlug = $args['rootSlug'];
-        $root = Category::where('slug', $rootSlug)->first();
-        if (!$root) return [];
+        $slugPrefix = $args['slugPrefix'] ?? null;
 
-        // Load ALL categories from DB at once (avoid N+1 queries) and group them by parent
-        $allCategories = Category::all();
-        $childrenByParent = $allCategories->groupBy('parent_id');
+        // Building the tree walks every category; categories change rarely
+        // (admin edits), so a short TTL keeps results fresh enough.
+        $allDescendants = Cache::remember('categories_by_root:' . $rootSlug, now()->addMinutes(10), function () use ($rootSlug) {
+            $root = Category::where('slug', $rootSlug)->first();
+            if (!$root) return [];
 
-        $allDescendants = [];
-        $this->collectDescendants($root, [], $allDescendants, $childrenByParent);
+            // Load ALL categories from DB at once (avoid N+1 queries) and group them by parent
+            $childrenByParent = Category::all()->groupBy('parent_id');
+
+            $result = [];
+            $this->collectDescendants($root, [], $result, $childrenByParent);
+            return $result;
+        });
+
+        if ($slugPrefix !== null && $slugPrefix !== '') {
+            return array_values(array_filter($allDescendants, fn ($c) => str_starts_with((string) $c['slug'], $slugPrefix)));
+        }
         return $allDescendants;
     }
 

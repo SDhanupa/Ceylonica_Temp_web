@@ -14,7 +14,7 @@ const EMAIL = 'cdicceylon@gmail.com';
 
 const TEXT: Record<Lang, { tagline: string; sections: string; ctaTitle: string; contact: string; contactLead: string; backToTop: string }> = {
   si: {
-    tagline: 'දත්ත මගින් ශ්‍රී ලංකාවේ පලතුරු කර්මාන්තය ශක්තිමත් කිරීම.',
+    tagline: 'ඔබේ ග්‍රාම නිලධාරී වසමේ කර්මාන්ත හා ව්‍යාපාර සමීක්ෂණය.',
     sections: 'ව්‍යාපාර කොටස්',
     ctaTitle: 'ඔබේ ව්‍යාපාරය තවම ලියාපදිංචි කර නැද්ද?',
     contact: 'අප අමතන්න',
@@ -22,7 +22,7 @@ const TEXT: Record<Lang, { tagline: string; sections: string; ctaTitle: string; 
     backToTop: 'ඉහළට',
   },
   ta: {
-    tagline: 'தரவுகள் மூலம் இலங்கையின் பழத் தொழிலை வலுப்படுத்துதல்.',
+    tagline: 'உங்கள் கிராம உத்தியோகத்தர் பிரிவின் கைத்தொழில் மற்றும் வணிகக் கணக்கெடுப்பு.',
     sections: 'வணிகப் பிரிவுகள்',
     ctaTitle: 'உங்கள் வணிகத்தை இன்னும் பதிவு செய்யவில்லையா?',
     contact: 'தொடர்புக்கு',
@@ -30,7 +30,7 @@ const TEXT: Record<Lang, { tagline: string; sections: string; ctaTitle: string; 
     backToTop: 'மேலே',
   },
   en: {
-    tagline: "Strengthening Sri Lanka's fruit industry with data.",
+    tagline: 'The Industry and Business Survey for your Grama Niladhari division.',
     sections: 'Business sections',
     ctaTitle: 'Is your business registered yet?',
     contact: 'Contact us',
@@ -44,6 +44,10 @@ interface Props {
   copy: LandingCopy;
   onStart: () => void;
   onFind: () => void;
+  /** Where a section link goes; defaults to scrolling within the current page. */
+  onSection?: (sectionId: string) => void;
+  /** The "register your business" card; off on the survey itself. */
+  showCta?: boolean;
 }
 
 const ColumnTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -53,9 +57,9 @@ const ColumnTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </Typography>
 );
 
-const LandingFooter: React.FC<Props> = ({ lang, copy, onStart, onFind }) => {
+const LandingFooter: React.FC<Props> = ({ lang, copy, onStart, onFind, onSection, showCta = true }) => {
   const t = TEXT[lang] ?? TEXT.si;
-  const jump = (id: string) => document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const jump = onSection ?? ((id: string) => document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 
   return (
     <Box component="footer" sx={{ position: 'relative', bgcolor: C.page }}>
@@ -86,7 +90,7 @@ const LandingFooter: React.FC<Props> = ({ lang, copy, onStart, onFind }) => {
             sx={{
               mt: { xs: 6, md: 8 },
               display: 'grid', gap: { xs: 5, md: 4 },
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: '1.3fr 1fr 1.25fr 1fr' },
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: showCta ? '1.3fr 1fr 1.25fr 1fr' : '1.4fr 1fr 1fr' },
             }}
           >
             {/* Brand */}
@@ -147,7 +151,7 @@ const LandingFooter: React.FC<Props> = ({ lang, copy, onStart, onFind }) => {
             </Box>
 
             {/* Call to action */}
-            <Box
+            {showCta && (<Box
               sx={{
                 alignSelf: 'start', borderRadius: '24px', p: { xs: 2.5, md: 3 },
                 bgcolor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,194,51,0.35)',
@@ -183,7 +187,7 @@ const LandingFooter: React.FC<Props> = ({ lang, copy, onStart, onFind }) => {
                 <SearchRoundedIcon aria-hidden sx={{ fontSize: '1.15rem' }} />
                 {copy.findType}
               </ButtonBase>
-            </Box>
+            </Box>)}
 
             {/* Contact */}
             <Box>

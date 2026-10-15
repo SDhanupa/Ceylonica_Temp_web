@@ -652,7 +652,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
           {/* Plain Transparent PNG Logos */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, my: 0.5 }}>
             <img
-              src="/logo.png"
+              src="/logo-192.webp"
               alt="Ceylonica Logo"
               style={{ height: '56px', width: 'auto', objectFit: 'contain' }}
             />
@@ -1122,7 +1122,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
             onClick={() => navigate(gnName && ccode ? `/gnpage/${gnName}/${ccode}` : '/gnpage')}
             sx={{ display: 'flex', alignItems: 'center', gap: 1.1, cursor: 'pointer', flexShrink: 0 }}
           >
-            <Box component="img" src="/logo.png" alt="Ceylonica" sx={{ height: 30, width: 30, objectFit: 'contain' }} />
+            <Box component="img" src="/logo-192.webp" alt="Ceylonica" sx={{ height: 30, width: 30, objectFit: 'contain' }} />
             <Typography sx={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: '1.15rem', color: isDarkMode ? '#f8fafc' : '#0f172a', letterSpacing: '-0.01em' }}>
               Ceylonica
             </Typography>
@@ -1384,7 +1384,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: { xs: 2.5, md: 3 }, mb: 1.6, animation: 'fadeInUp 0.35s ease both' }}>
               <Box
                 component="img"
-                src="/logo.png"
+                src="/logo-192.webp"
                 alt="Ceylonica Logo"
                 sx={{
                   height: { xs: 36, md: 40, lg: 44 },

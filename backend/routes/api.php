@@ -53,11 +53,13 @@ Route::middleware('throttle:20,1')->group(function () {
 
 // Serve images through PHP since frontend Nginx container doesn't share the volume
 Route::get('/uploads/{path}', function($path) {
-    $file = public_path('uploads/' . $path);
-    if (file_exists($file)) {
-        return response()->file($file);
+    // Resolve and require the file to stay inside public/uploads, so "../" can't reach .env or source files.
+    $root = realpath(public_path('uploads'));
+    $file = realpath(public_path('uploads/' . $path));
+    if (!$root || !$file || !str_starts_with($file, $root . DIRECTORY_SEPARATOR) || !is_file($file)) {
+        abort(404);
     }
-    abort(404);
+    return response()->file($file, ['X-Content-Type-Options' => 'nosniff']);
 })->where('path', '.*');
 
 // ─── Public Business Profile Routes (No Auth) ───────────────────────────────

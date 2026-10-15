@@ -136,7 +136,7 @@ const LocationSelectorModal: React.FC<LocationSelectorModalProps> = ({ open, onC
         {/* Plain Transparent PNG Logos (No border, No box) */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, my: 0.5 }}>
           <img
-            src="/logo.png"
+            src="/logo-192.webp"
             alt="Ceylonica Logo"
             style={{ height: '56px', width: 'auto', objectFit: 'contain' }}
           />

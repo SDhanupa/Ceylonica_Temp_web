@@ -4,11 +4,11 @@ import { C } from './tokens';
 import type { Lang } from './fruitBusinessTypes';
 
 export const MINISTRY = {
-  src: encodeURI('/logo csa.jpeg'),
+  src: '/ministry.webp',
   alt: 'Ministry of Trade, Commerce, Food Security and Co-operative Development',
 };
-export const CSA = { src: '/csa.jpeg', alt: 'CSA' };
-export const CDIC = { src: '/logo.png', alt: 'CDIC' };
+export const CSA = { src: '/csa.webp', alt: 'CSA' };
+export const CDIC = { src: '/logo-192.webp', alt: 'CDIC' };
 
 export const PARTNER_LABEL: Record<Lang, string> = {
   si: 'හවුල්කාරිත්වයෙන්',

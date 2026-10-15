@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
+import { Box, LinearProgress } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -9,9 +10,17 @@ import { LanguageProvider } from './context/LanguageContext';
 import apolloClient from './api/apolloClient';
 
 import FruitLandingPage from './pages/FruitLandingPage';
-import CategoryDetailPage from './pages/CategoryDetailPage';
-import IndustrySurveyPage from './pages/IndustrySurveyPage';
-import PublicBusinessProfilePage from './pages/PublicBusinessProfilePage';
+// The GN landing page is the entry point and stays in the main bundle; the
+// other pages load on first visit.
+const CategoryDetailPage = lazy(() => import('./pages/CategoryDetailPage'));
+const IndustrySurveyPage = lazy(() => import('./pages/IndustrySurveyPage'));
+const PublicBusinessProfilePage = lazy(() => import('./pages/PublicBusinessProfilePage'));
+
+const PageLoading: React.FC = () => (
+  <Box role="progressbar" aria-label="Loading" sx={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000 }}>
+    <LinearProgress color="success" />
+  </Box>
+);
 
 const App: React.FC = () => {
   return (
@@ -21,6 +30,7 @@ const App: React.FC = () => {
           <CssBaseline />
           <Router>
             <AuthProvider>
+              <Suspense fallback={<PageLoading />}>
               <Routes>
               {/* Home → redirect to GN page */}
               <Route
@@ -56,6 +66,7 @@ const App: React.FC = () => {
 
               <Route path="*" element={<Navigate to="/gnpage" replace />} />
               </Routes>
+              </Suspense>
             </AuthProvider>
           </Router>
         </ThemeProvider>

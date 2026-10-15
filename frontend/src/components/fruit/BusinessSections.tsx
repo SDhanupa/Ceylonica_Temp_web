@@ -11,11 +11,11 @@ const SCROLL_OFFSET = TOP_BAR + NAV_HEIGHT + 12;
 const sectionDomId = (id: SectionId) => `section-${id}`;
 
 const PHOTO: Record<SectionId, string> = {
-  cultivation: '/1.jpg',
-  postharvest: '/2.jpg',
-  processing: '/3.jpg',
-  trade: '/4.jpg',
-  services: '/5.jpg',
+  cultivation: '/1.webp',
+  postharvest: '/2.webp',
+  processing: '/3.webp',
+  trade: '/4.webp',
+  services: '/5.webp',
 };
 
 // Neutral shade so white text stays readable on any photo without recolouring it.
@@ -56,7 +56,7 @@ const tornEdgeSx = {
 
 const tearLineSx = {
   position: 'absolute', top: 0, left: 0, right: 0, height: 'var(--tear)', zIndex: 1, pointerEvents: 'none',
-  backgroundImage: 'url(/tear_strip.png)', backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
+  backgroundImage: 'url(/tear_strip.webp)', backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
   filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.35))',
 } as const;
 
@@ -66,17 +66,17 @@ interface Props {
   onSelect: (t: BusinessType) => void;
 }
 
-const useInView = <T extends Element>(): [React.RefObject<T>, boolean] => {
+const useInView = <T extends Element>(rootMargin = '0px 0px -10% 0px'): [React.RefObject<T>, boolean] => {
   const ref = useRef<T>(null);
   const [seen, setSeen] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el || seen) return;
     if (typeof IntersectionObserver === 'undefined') { setSeen(true); return; }
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setSeen(true); io.disconnect(); } }, { rootMargin: '0px 0px -10% 0px' });
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setSeen(true); io.disconnect(); } }, { rootMargin });
     io.observe(el);
     return () => io.disconnect();
-  }, [seen]);
+  }, [seen, rootMargin]);
   return [ref, seen];
 };
 
@@ -242,10 +242,14 @@ const PhotoSection: React.FC<{ section: BusinessSection; index: number; lang: La
   const types = isCultivation ? all.filter((t) => t.isClass) : all;
   const numberOnLeft = index % 2 === 1;
   const torn = index > 0;
+  // CSS backgrounds download as soon as they are styled; start each photo only
+  // when its section is within ~800px of the viewport.
+  const [sectionRef, near] = useInView<HTMLElement>('800px 0px 800px 0px');
 
   return (
     <Box
       component="section"
+      ref={sectionRef}
       id={sectionDomId(section.id)}
       aria-labelledby={`${sectionDomId(section.id)}-title`}
       sx={{
@@ -253,7 +257,7 @@ const PhotoSection: React.FC<{ section: BusinessSection; index: number; lang: La
         position: 'relative', overflow: 'hidden', isolation: 'isolate',
         py: { xs: 8, md: 12 },
         backgroundColor: NO_PHOTO,
-        backgroundImage: `${SHADE}, url(${PHOTO[section.id]})`,
+        backgroundImage: near ? `${SHADE}, url(${PHOTO[section.id]})` : SHADE,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',

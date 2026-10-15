@@ -34,39 +34,94 @@ export const DYNAMIC_STEPS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 export const isDynamicStep = (step: number) => DYNAMIC_STEPS.includes(step);
 
 /* ── NIC parsing (also used to prefill DOB/age on the page) ───────────────── */
-export const extractNICDetails = (nic: string): { dob: string; age: string } => {
-  let year = 0;
-  let dayText = 0;
-  const cleanNic = (nic || '').trim().toUpperCase();
+/* ── Dates of birth ───────────────────────────────────────────────────────
+   All dates are ISO "YYYY-MM-DD" strings in the user's local calendar, never
+   locale-formatted text, so stored answers read the same on every device.   */
 
-  if (cleanNic.length === 10) {
-    year = 1900 + parseInt(cleanNic.substring(0, 2), 10);
-    dayText = parseInt(cleanNic.substring(2, 5), 10);
-  } else if (cleanNic.length === 12) {
-    year = parseInt(cleanNic.substring(0, 4), 10);
-    dayText = parseInt(cleanNic.substring(4, 7), 10);
-  } else if (cleanNic.length === 9) {
-    year = 1900 + parseInt(cleanNic.substring(0, 2), 10);
-    dayText = parseInt(cleanNic.substring(2, 5), 10);
+export const MIN_DOB = '1900-01-01';
+export const MAX_AGE = 120;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** Today's date in the local calendar as YYYY-MM-DD. */
+export const todayIso = (now: Date = new Date()): string =>
+  `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+
+/** Parse a strict YYYY-MM-DD string into its parts; rejects impossible dates such as 2023-02-30. */
+export const parseIsoDate = (s?: string): { y: number; m: number; d: number } | null => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s || '').trim());
+  if (!match) return null;
+  const y = Number(match[1]), m = Number(match[2]), d = Number(match[3]);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+  return { y, m, d };
+};
+
+/** Completed years between a date of birth and `asOf`; null for invalid or future dates. */
+export const calcAge = (dobIso?: string, asOf: Date = new Date()): number | null => {
+  const dob = parseIsoDate(dobIso);
+  if (!dob) return null;
+  const y = asOf.getFullYear(), m = asOf.getMonth() + 1, d = asOf.getDate();
+  let age = y - dob.y;
+  if (m < dob.m || (m === dob.m && d < dob.d)) age -= 1; // birthday not reached yet this year
+  return age >= 0 ? age : null;
+};
+
+/** The stored combined answer, e.g. "1985-04-12 / 41". Empty when the date is unusable. */
+export const formatDobAge = (dobIso?: string, asOf: Date = new Date()): string => {
+  const age = calcAge(dobIso, asOf);
+  return age === null ? '' : `${dobIso} / ${age}`;
+};
+
+/** Recover the ISO date from a stored q_dob_age ("YYYY-MM-DD / N"); older locale-formatted values return ''. */
+export const dobFromStored = (stored?: string): string => {
+  const iso = (stored || '').split('/')[0].trim();
+  return parseIsoDate(iso) ? iso : '';
+};
+
+/* ── NIC parsing (prefills the date of birth on the page) ─────────────────── */
+
+/**
+ * Date of birth encoded in a Sri Lankan NIC, as YYYY-MM-DD ('' if not derivable).
+ * Old format: YYDDD + 4 digits + V/X; new format: YYYYDDD + 5 digits. DDD is the
+ * day of year counted on a 366-day calendar (Feb always has 29 days), +500 for women.
+ */
+export const dobFromNIC = (nic?: string): string => {
+  const clean = (nic || '').trim().toUpperCase();
+  let year: number, day: number;
+  if (/^\d{9}[VX]?$/.test(clean)) {
+    year = 1900 + parseInt(clean.substring(0, 2), 10);
+    day = parseInt(clean.substring(2, 5), 10);
+  } else if (/^\d{12}$/.test(clean)) {
+    year = parseInt(clean.substring(0, 4), 10);
+    day = parseInt(clean.substring(4, 7), 10);
   } else {
-    return { dob: '', age: '' };
+    return '';
   }
+  if (day > 500) day -= 500;
+  if (day < 1 || day > 366) return '';
+  const monthLengths = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let month = 0;
+  while (month < 12 && day > monthLengths[month]) { day -= monthLengths[month]; month += 1; }
+  const iso = `${year}-${pad2(month + 1)}-${pad2(day)}`;
+  // 29 Feb in a non-leap year has no real date.
+  return parseIsoDate(iso) ? iso : '';
+};
 
-  if (isNaN(year) || isNaN(dayText)) return { dob: '', age: '' };
-  if (dayText > 500) dayText -= 500;
-  if (dayText < 1 || dayText > 366) return { dob: '', age: '' };
+/** Kept for existing callers: NIC → { dob: 'YYYY-MM-DD', age: 'N' }. */
+export const extractNICDetails = (nic: string): { dob: string; age: string } => {
+  const dob = dobFromNIC(nic);
+  const age = calcAge(dob);
+  return dob && age !== null ? { dob, age: String(age) } : { dob: '', age: '' };
+};
 
-  const isLeapYear = (y: number) => (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
-  if (!isLeapYear(year) && dayText > 59) dayText -= 1;
-
-  const dob = new Date(year, 0);
-  dob.setDate(dayText);
-
-  const diff_ms = Date.now() - dob.getTime();
-  const age_dt = new Date(diff_ms);
-  const age = Math.abs(age_dt.getUTCFullYear() - 1970);
-
-  return { dob: dob.toLocaleDateString(), age: age.toString() };
+/** Problem with an entered date of birth, or null when it is acceptable (or empty). */
+export const dobProblem = (dobIso: string | undefined, L: (en: string, si: string, ta?: string) => string, asOf: Date = new Date()): string | null => {
+  if (!dobIso || !dobIso.trim()) return null;
+  if (!parseIsoDate(dobIso)) return L('Enter a valid date', 'වලංගු දිනයක් ඇතුළත් කරන්න', 'சரியான தேதியை உள்ளிடவும்');
+  if (dobIso > todayIso(asOf)) return L('Date of birth cannot be in the future', 'උපන් දිනය අනාගතයේ විය නොහැක', 'பிறந்த தேதி எதிர்காலத்தில் இருக்க முடியாது');
+  if (dobIso < MIN_DOB || (calcAge(dobIso, asOf) ?? 0) > MAX_AGE) return L('Check the year of birth', 'උපන් වර්ෂය පරීක්ෂා කරන්න', 'பிறந்த ஆண்டைச் சரிபார்க்கவும்');
+  return null;
 };
 
 /* ── Low-level predicates ─────────────────────────────────────────────────── */
@@ -346,6 +401,7 @@ export function getStepErrors(step: number, fv: FormValues, L: Translate, dynami
       req('q_owner_name');
       req('q_gender', SEL);
       if (!isBlank(fv['q_nic']) && !isValidNIC(fv['q_nic'])) e['q_nic'] = L('Enter a valid NIC number', 'වලංගු ජා.හැ. අංකයක් ඇතුළත් කරන්න', 'சரியான தேசிய அடையாள எண்ணை உள்ளிடவும்');
+      { const p = dobProblem(fv['q_dob'], L); if (p) e['q_dob_age'] = p; }
       if (!isBlank(fv['q_mobile']) && !isValidPhone(fv['q_mobile'])) e['q_mobile'] = L('Enter a valid phone number', 'වලංගු දුරකථන අංකයක් ඇතුළත් කරන්න', 'சரியான தொலைபேசி எண்ணை உள்ளிடவும்');
       if (!isBlank(fv['q_whatsapp']) && !isValidPhone(fv['q_whatsapp'])) e['q_whatsapp'] = L('Enter a valid phone number', 'වලංගු දුරකථන අංකයක් ඇතුළත් කරන්න', 'சரியான தொலைபேசி எண்ணை உள்ளிடவும்');
       if (!isBlank(fv['q_email']) && !isValidEmail(fv['q_email'])) e['q_email'] = L('Enter a valid email address', 'වලංගු විද්‍යුත් තැපෑලක් ඇතුළත් කරන්න', 'சரியான மின்னஞ்சலை உள்ளிடவும்');

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Box, Button, ButtonBase, Container, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
@@ -8,6 +8,8 @@ import ConfirmationNumberRoundedIcon from '@mui/icons-material/ConfirmationNumbe
 import TranslateRoundedIcon from '@mui/icons-material/TranslateRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import HolidayVillageRoundedIcon from '@mui/icons-material/HolidayVillageRounded';
+import StorefrontRoundedIcon from '@mui/icons-material/StorefrontRounded';
+import MoneyOffRoundedIcon from '@mui/icons-material/MoneyOffRounded';
 import { useLanguage } from '../context/LanguageContext';
 import { getUserName, setUserName } from '../utils/cookieUtils';
 import GnLocationModal from '../components/GnLocationModal';
@@ -19,7 +21,7 @@ import StartSurveyDialog, { primaryCtaSx } from '../components/fruit/StartSurvey
 import AreaPickerDialog, { AreaOption } from '../components/fruit/AreaPickerDialog';
 import { FruitIcon } from '../components/fruit/FruitIcons';
 import BusinessSections from '../components/fruit/BusinessSections';
-import { HeaderPartnerLogos } from '../components/fruit/PartnerLogos';
+import SiteTopBar from '../components/fruit/SiteTopBar';
 import LandingFooter from '../components/fruit/LandingFooter';
 import { FruitTile, LanguageSwitch, TypeRow } from '../components/fruit/LandingParts';
 import { COPY } from '../components/fruit/landingCopy';
@@ -78,6 +80,15 @@ const FruitLandingPage: React.FC = () => {
     document.title = `Ceylonica | ${copy.eventBadge}`;
   }, [lang, copy.eventBadge]);
 
+  // Deep links from other pages (e.g. the survey footer) land on #section-… / #types.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const id = decodeURIComponent(hash.slice(1));
+    const t = window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    return () => window.clearTimeout(t);
+  }, [hash]);
+
   useEffect(() => {
     if (gnName && ccode) {
       localStorage.setItem('last_gn_url', `/gnpage/${encodeURIComponent(gnName)}/${encodeURIComponent(ccode)}`);
@@ -132,37 +143,18 @@ const FruitLandingPage: React.FC = () => {
   };
 
   const showSticky = !heroCtaVisible && !finalCtaVisible && !startOpen && !areaOpen;
-  const benefitIcons = [ConfirmationNumberRoundedIcon, TranslateRoundedIcon, SaveRoundedIcon, HolidayVillageRoundedIcon];
+  const benefitIcons = [ConfirmationNumberRoundedIcon, StorefrontRoundedIcon, HolidayVillageRoundedIcon];
+  const objectionIcons = [MoneyOffRoundedIcon, TranslateRoundedIcon, SaveRoundedIcon];
   const areaText = area ? `${area.name} (${area.code})` : null;
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: C.page, color: C.ink, display: 'flex', flexDirection: 'column' }}>
       {/* ── Header ── */}
-      <Box
-        component="header"
-        sx={{
-          position: 'sticky', top: 0, zIndex: 30,
-          // Opaque so the white-backed partner JPEGs never show as boxes over dark sections.
-          bgcolor: '#FFFFFF', borderBottom: `1px solid ${C.line}`,
-        }}
-      >
-        <Container maxWidth="lg" sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5 }, minHeight: 64, px: { xs: 2, sm: 3 } }}>
-          <ButtonBase
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            aria-label="Ceylonica"
-            sx={{ display: 'flex', alignItems: 'center', gap: 1, borderRadius: '12px', p: 0.5, ...focusRing }}
-          >
-            <Box component="img" src="/logo.png" alt="" sx={{ width: 36, height: 36, objectFit: 'contain' }} />
-            <Typography
-              component="span"
-              sx={{ display: { xs: 'none', sm: 'block' }, fontFamily: "'Gemunu Libre', sans-serif", fontWeight: 800, fontSize: '1.45rem', color: C.leaf }}
-            >
-              Ceylonica
-            </Typography>
-          </ButtonBase>
-          <HeaderPartnerLogos />
-          <Box sx={{ flex: 1 }} />
-          <LanguageSwitch value={lang} onChange={setLanguage} />
+      <SiteTopBar
+        lang={lang}
+        onLanguage={setLanguage}
+        onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        action={
           <Button
             onClick={() => openStart(null)}
             sx={{
@@ -174,8 +166,8 @@ const FruitLandingPage: React.FC = () => {
           >
             {copy.navSurvey}
           </Button>
-        </Container>
-      </Box>
+        }
+      />
 
       <Box component="main" sx={{ flex: 1 }}>
         {/* The header sets zIndex 9999 on itself; this wrapper keeps it under the sticky top bar. */}
@@ -328,7 +320,7 @@ const FruitLandingPage: React.FC = () => {
             <Typography id="benefits-title" component="h2" sx={h2Sx(lang)}>{copy.benefitsTitle}</Typography>
             <Box
               component="ul"
-              sx={{ listStyle: 'none', p: 0, m: 0, mt: 3.5, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' } }}
+              sx={{ listStyle: 'none', p: 0, m: 0, mt: 3.5, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' } }}
             >
               {copy.benefits.map(([title, text], i) => {
                 const Icon = benefitIcons[i];
@@ -339,6 +331,32 @@ const FruitLandingPage: React.FC = () => {
                     </Box>
                     <Typography component="h3" sx={{ mt: 1.75, fontWeight: 800, fontSize: '1.08rem', lineHeight: 1.45, color: C.ink }}>{title}</Typography>
                     <Typography sx={{ mt: 0.5, color: C.inkMuted, lineHeight: 1.65 }}>{text}</Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Container>
+        </Box>
+
+        {/* ── Objections, answered right before the call to action ── */}
+        <Box component="section" aria-labelledby="objections-title" sx={{ pb: { xs: 6, md: 9 } }}>
+          <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+            <Typography id="objections-title" component="h2" sx={h2Sx(lang)}>{copy.objectionsTitle}</Typography>
+            <Box
+              component="ul"
+              sx={{ listStyle: 'none', p: 0, m: 0, mt: 3, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' } }}
+            >
+              {copy.objections.map(([title, text], i) => {
+                const Icon = objectionIcons[i];
+                return (
+                  <Box component="li" key={title} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', p: 2, borderRadius: '18px', bgcolor: '#EDF6E8' }}>
+                    <Box aria-hidden sx={{ width: 40, height: 40, borderRadius: '12px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: C.card, color: C.field }}>
+                      <Icon sx={{ fontSize: '1.25rem' }} />
+                    </Box>
+                    <Box>
+                      <Typography component="h3" sx={{ fontWeight: 800, fontSize: '1.02rem', lineHeight: 1.4, color: C.ink }}>{title}</Typography>
+                      <Typography sx={{ mt: 0.25, color: C.inkMuted, lineHeight: 1.6, fontSize: '0.95rem' }}>{text}</Typography>
+                    </Box>
                   </Box>
                 );
               })}

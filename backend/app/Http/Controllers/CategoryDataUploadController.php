@@ -498,16 +498,18 @@ class CategoryDataUploadController extends Controller
 
     public function getAllCategories()
     {
-        $categories = \App\Models\Category::whereNotNull('parent_id')->get(['slug', 'name_en', 'name_si', 'name_ta', 'parent_id']);
-        
-        $formattedCategories = $categories->map(function($cat) {
-            return [
-                'slug' => $cat->slug,
-                'nameEn' => $cat->name_en,
-                'nameSi' => $cat->name_si,
-                'nameTa' => $cat->name_ta,
-                'parent_id' => $cat->parent_id
-            ];
+        // Read-mostly list; a short TTL keeps admin edits visible within minutes.
+        $formattedCategories = Cache::remember('all_categories_flat', now()->addMinutes(10), function () {
+            return \App\Models\Category::whereNotNull('parent_id')
+                ->get(['slug', 'name_en', 'name_si', 'name_ta', 'parent_id'])
+                ->map(fn ($cat) => [
+                    'slug' => $cat->slug,
+                    'nameEn' => $cat->name_en,
+                    'nameSi' => $cat->name_si,
+                    'nameTa' => $cat->name_ta,
+                    'parent_id' => $cat->parent_id,
+                ])
+                ->all();
         });
 
         return response()->json([

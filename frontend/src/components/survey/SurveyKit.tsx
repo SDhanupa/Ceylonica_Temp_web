@@ -19,10 +19,10 @@ import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownR
    DESIGN TOKENS — harmonised with the app's blue brand + emerald progress
    ────────────────────────────────────────────────────────────────────────── */
 export const T = {
-  brand: '#2563eb',
-  brandDark: '#1d4ed8',
-  brandSoft: '#eff6ff',
-  brandSofter: 'rgba(37,99,235,0.06)',
+  brand: '#15803D',
+  brandDark: '#14532D',
+  brandSoft: '#ECF7E6',
+  brandSofter: 'rgba(21,128,61,0.06)',
   accent: '#059669',
   accentSoft: '#ecfdf5',
   ink: '#0f172a',
@@ -32,8 +32,8 @@ export const T = {
   line: '#e2e8f0',
   lineSoft: '#eef2f7',
   surface: '#ffffff',
-  canvasTop: '#f4f7fc',
-  canvasBottom: '#eef2f9',
+  canvasTop: '#F5F9F2',
+  canvasBottom: '#EDF4E8',
   danger: '#dc2626',
   radius: 16,
   field: 12,
@@ -85,7 +85,7 @@ const fieldSx = {
     '& fieldset': { borderColor: T.line },
     '&:hover fieldset': { borderColor: '#c7d2e2' },
     '&.Mui-focused fieldset': { borderColor: T.brand, borderWidth: '1.5px' },
-    '&.Mui-focused': { boxShadow: '0 0 0 4px rgba(37,99,235,0.10)' },
+    '&.Mui-focused': { boxShadow: '0 0 0 4px rgba(21,128,61,0.10)' },
   },
   '& .MuiInputBase-input': { color: T.ink, fontWeight: 500 },
 };
@@ -318,7 +318,7 @@ export const Segmented: React.FC<{
             color: active ? T.brandDark : T.body,
             bgcolor: active ? T.brandSoft : '#fff',
             border: `1.5px solid ${active ? T.brand : T.line}`,
-            boxShadow: active ? '0 0 0 4px rgba(37,99,235,0.08)' : 'none',
+            boxShadow: active ? '0 0 0 4px rgba(21,128,61,0.08)' : 'none',
             transition: 'all .18s ease',
             '&:hover': { borderColor: active ? T.brand : '#c7d2e2', bgcolor: active ? T.brandSoft : '#f8fafc' },
           }}
@@ -373,7 +373,7 @@ export const ChipMultiSelect: React.FC<{
               color: active ? '#fff' : T.body,
               bgcolor: active ? T.brand : '#fff',
               border: `1.5px solid ${active ? T.brand : T.line}`,
-              boxShadow: active ? '0 4px 12px rgba(37,99,235,0.22)' : 'none',
+              boxShadow: active ? '0 4px 12px rgba(21,128,61,0.22)' : 'none',
               transition: 'all .16s ease',
               '&:hover': { borderColor: active ? T.brandDark : '#c7d2e2', bgcolor: active ? T.brandDark : '#f8fafc' },
             }}

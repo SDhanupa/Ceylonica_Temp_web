@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import GnTopHeaderBar from '../components/GnTopHeaderBar';
-import GnPageFooter from '../components/GnPageFooter';
-import { Box, Typography, Button, Container, TextField, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, FormControl, Select, MenuItem, Autocomplete, Table, TableBody, TableCell, TableHead, TableRow, Chip } from '@mui/material';
+import SiteTopBar from '../components/fruit/SiteTopBar';
+import LandingFooter from '../components/fruit/LandingFooter';
+import { COPY } from '../components/fruit/landingCopy';
+import type { Lang } from '../components/fruit/fruitBusinessTypes';
+import SurveyDialog, { DialogButton, DetailList, Callout, DialogTone } from '../components/survey/SurveyDialog';
+import { Box, Typography, Button, ButtonBase, Container, TextField, CircularProgress, FormControl, Select, MenuItem, Autocomplete } from '@mui/material';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -10,9 +14,9 @@ import { Tooltip, IconButton } from '@mui/material';
 import { useAuth } from '../auth/AuthProvider';
 import { useLanguage } from '../context/LanguageContext';
 import { useQuery, useLazyQuery } from '@apollo/client';
-import { GET_QUESTIONS, GET_GN_BY_CCODE, GET_CATEGORIES_BY_ROOT_SLUG } from '../graphql/queries';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import LocationSelectorModal from '../components/LocationSelectorModal';
+import { GET_QUESTIONS, GET_GN_FOR_SURVEY, GET_CATEGORIES_BY_ROOT_SLUG } from '../graphql/queries';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import GnLocationModal from '../components/GnLocationModal';
 import { getUserName } from '../utils/cookieUtils';
 
 /* ── Survey design system ─────────────────────────────────────────────────── */
@@ -21,7 +25,8 @@ import {
 } from '../components/survey/SurveyKit';
 import SurveyProgress, { SurveySection } from '../components/survey/SurveyProgress';
 import {
-  extractNICDetails, getStepErrors, getFirstInvalidStep, isDynamicStep, DYNAMIC_STEPS, TOTAL_STEPS,
+  getStepErrors, getFirstInvalidStep, isDynamicStep, DYNAMIC_STEPS, TOTAL_STEPS,
+  dobFromNIC, formatDobAge, dobFromStored, calcAge, todayIso, MIN_DOB,
 } from '../components/survey/surveyValidation';
 import { DYNAMIC_STEP_TITLES } from '../components/survey/surveySteps';
 
@@ -46,6 +51,26 @@ import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import BookmarkAddOutlinedIcon from '@mui/icons-material/BookmarkAddOutlined';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import MapRoundedIcon from '@mui/icons-material/MapRounded';
+import ApartmentRoundedIcon from '@mui/icons-material/ApartmentRounded';
+import EventRoundedIcon from '@mui/icons-material/EventRounded';
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
+import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
+import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
+import MyLocationRoundedIcon from '@mui/icons-material/MyLocationRounded';
+import LocationOffRoundedIcon from '@mui/icons-material/LocationOffRounded';
+import CloudDoneRoundedIcon from '@mui/icons-material/CloudDoneRounded';
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
+import SendRoundedIcon from '@mui/icons-material/SendRounded';
+import SmsRoundedIcon from '@mui/icons-material/SmsRounded';
+import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
+import CategoryRoundedIcon from '@mui/icons-material/CategoryRounded';
+import TagRoundedIcon from '@mui/icons-material/TagRounded';
+import ArrowBackIosNewRoundedIcon from '@mui/icons-material/ArrowBackIosNewRounded';
 
 // ─── Reusable Photo Uploader Component ───────────────────────────────────────
 interface PhotoUploaderProps {
@@ -53,7 +78,7 @@ interface PhotoUploaderProps {
   value: string;
   multiple?: boolean;
   language: string;
-  onChange: (names: string, previews: string[]) => void;
+  onChange: (paths: string) => void;
 }
 
 const PhotoUploader: React.FC<PhotoUploaderProps> = ({ fieldKey, value, multiple = false, language, onChange }) => {
@@ -306,8 +331,13 @@ const DynamicQuestionRenderer: React.FC<DynamicQuestionRendererProps> = ({ quest
 
 const IndustrySurveyPage: React.FC = () => {
   const { isAuthenticated, login, isLoading, userInfo, token } = useAuth();
-  const { language } = useLanguage();
+  const { language, setLanguage } = useLanguage();
+  const lang = ((language as Lang) || 'si');
+  const siteCopy = COPY[lang] ?? COPY.si;
   const { gnName, ccode } = useParams<{ gnName?: string, ccode?: string }>();
+  const [searchParams] = useSearchParams();
+  const presetType = searchParams.get('type');
+  const presetAppliedFor = useRef<string | null>(null);
   const navigate = useNavigate();
   const locationState = useLocation().state as { fromSelector?: boolean };
   // The name is collected on the GN panel and stored in a cookie. It is the
@@ -318,15 +348,44 @@ const IndustrySurveyPage: React.FC = () => {
     fetchPolicy: 'cache-and-network',
   });
 
-  const { data: gnData, loading: gnLoading } = useQuery(GET_GN_BY_CCODE, {
+  // Light query (names + boundary). The full GN record pulls a dozen census
+  // tables and, on a single-threaded dev server, held the first dialog back.
+  const { data: gnData, loading: gnLoading } = useQuery(GET_GN_FOR_SURVEY, {
     variables: { CCODE: ccode },
     skip: !ccode,
   });
+
+  // Where "back" goes: this area's GN page.
+  const gnHomeUrl = gnName && ccode
+    ? `/gnpage/${encodeURIComponent(gnName)}/${encodeURIComponent(ccode)}`
+    : (localStorage.getItem('last_gn_url') || '/gnpage');
+  const gnPick = (base: 'name' | 'ds' | 'dis'): string | undefined => {
+    const gn = gnData?.gnByCcode;
+    if (!gn) return undefined;
+    const sfx = language === 'si' ? 'Si' : language === 'ta' ? 'Ta' : 'En';
+    return gn[`${base}${sfx}`] || gn[`${base}En`] || '';
+  };
+  const areaName = gnPick('name') || (gnName ? decodeURIComponent(gnName).replace(/-/g, ' ') : '');
 
   const [formValues, setFormValues] = useState<Record<string, string>>({});
 
   const handleInputChange = (key: string, value: string) => {
     setFormValues(prev => ({ ...prev, [key]: value }));
+  };
+
+  /* Date of birth: only the date is entered; q_dob_age ("YYYY-MM-DD / age") is
+     always derived from it so the two can never disagree. */
+  const setDob = (iso: string) => {
+    setFormValues(prev => ({ ...prev, q_dob: iso, q_dob_age: formatDobAge(iso) }));
+  };
+  // A NIC change re-derives the date only while the date still came from the
+  // previous NIC (or is empty); a date the user typed themselves is kept.
+  const applyNicToDob = (prev: Record<string, string>, oldNic: string | undefined, newNic: string) => {
+    const fromOld = dobFromNIC(oldNic);
+    const current = prev['q_dob'] || '';
+    if (current && current !== fromOld) return prev;
+    const iso = dobFromNIC(newNic);
+    return { ...prev, q_dob: iso, q_dob_age: formatDobAge(iso) };
   };
   const [currentStep, setCurrentStep] = useState(0);
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
@@ -379,7 +438,7 @@ const IndustrySurveyPage: React.FC = () => {
   // Load categories once auth is ready
   useEffect(() => {
     if (!isLoading) {
-      fetchCategories({ variables: { rootSlug: 'location-1-4' } });
+      fetchCategories({ variables: { rootSlug: 'location-1-4', slugPrefix: '1.3.4.' } });
     }
   }, [isLoading]);
 
@@ -626,8 +685,8 @@ const IndustrySurveyPage: React.FC = () => {
           />
         ))}
         {nextActiveStep(stepIndex) === undefined
-          ? <StepNav prev={previousActiveStep(stepIndex)} submit />
-          : <StepNav prev={previousActiveStep(stepIndex)} next={nextActiveStep(stepIndex)} />}
+          ? StepNav({ prev: previousActiveStep(stepIndex), submit: true })
+          : StepNav({ prev: previousActiveStep(stepIndex), next: nextActiveStep(stepIndex) })}
       </Box>
     );
   };
@@ -653,7 +712,9 @@ const IndustrySurveyPage: React.FC = () => {
   const [gpsCoordinates, setGpsCoordinates] = useState<{ lat: number, lng: number } | null>(null);
   const [gpsChecking, setGpsChecking] = useState(false);
   const [gpsWrongLocationPopup, setGpsWrongLocationPopup] = useState<{ lat: number, lng: number } | null>(null);
-  const [genericAlertPopup, setGenericAlertPopup] = useState<{ open: boolean, title: string, message: string } | null>(null);
+  const [genericAlertPopup, setGenericAlertPopup] = useState<{ open: boolean, title: string, message: string, tone?: DialogTone } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
 
   // Universal draft key works with or without ccode
   const draftKey = ccode ? `survey_draft_${ccode}` : `survey_draft_user_${userInfo?.sub || 'anon'}`;
@@ -664,27 +725,14 @@ const IndustrySurveyPage: React.FC = () => {
       localStorage.removeItem('force_new_submission');
       localStorage.removeItem(draftKey);
       localStorage.removeItem(`${draftKey}_db_id`);
+      localStorage.removeItem(`${draftKey}_edit_token`);
     }
 
-    // On route change: check for existing draft and silently resume
-    const draftStr = localStorage.getItem(draftKey);
-    if (draftStr && !forceNew) {
-      try {
-        const draft = JSON.parse(draftStr);
-        if (draft.formValues && Object.keys(draft.formValues).length > 0) {
-          setFormValues(draft.formValues);
-          if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep);
-          if (draft.gpsCoordinates) setGpsCoordinates(draft.gpsCoordinates);
-          if (draft.surveyStartTime) setSurveyStartTime(new Date(draft.surveyStartTime));
-          // Skip all popups, go straight to form
-          setLocationConfirmed(true);
-          setShowLocationSelector(false);
-          return;
-        }
-      } catch { }
-    }
+    // A saved draft is not resumed silently: the user still confirms the area,
+    // then the "Pick up where you left off?" dialog offers resume or start over.
+    // The draft stays in storage until they choose (the autosave skips empty forms).
+    const hasDraft = !!localStorage.getItem(draftKey);
 
-    // No draft — normal flow
     setFormValues({});
     setCurrentStep(0);
     setSurveyStartTime(null);
@@ -700,24 +748,45 @@ const IndustrySurveyPage: React.FC = () => {
       localStorage.setItem('last_gn_url', `/gnpage/${encodeURIComponent(gnName)}/${encodeURIComponent(ccode)}`);
       if (locationState?.fromSelector) {
         setLocationConfirmed(true);
-        setShowMetadataPopup(true);
+        if (hasDraft) setShowResumePopup(true);
+        else setShowMetadataPopup(true);
       } else {
         setLocationConfirmed(false);
       }
     }
   }, [ccode, gnName, locationState]);
 
-  // Auto-save draft on every change
+  // Drafts saved before q_dob existed only have q_dob_age; recover the date when it is ISO.
+  // Older locale-formatted values ("4/12/1985 / 41") can't be read reliably and are left for re-entry.
   useEffect(() => {
-    if (Object.keys(formValues).length > 0 || currentStep > 0) {
+    if (formValues['q_dob'] || !formValues['q_dob_age']) return;
+    const iso = dobFromStored(formValues['q_dob_age']);
+    if (iso) setFormValues(prev => (prev['q_dob'] ? prev : { ...prev, q_dob: iso }));
+  }, [formValues['q_dob'], formValues['q_dob_age']]);
+
+  // Auto-save draft, debounced so typing doesn't serialise the whole form on every keystroke.
+  const pendingDraftWrite = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!(Object.keys(formValues).length > 0 || currentStep > 0)) { pendingDraftWrite.current = null; return; }
+    const write = () => {
+      pendingDraftWrite.current = null;
       localStorage.setItem(draftKey, JSON.stringify({
         formValues,
         currentStep,
         surveyStartTime: surveyStartTime?.toISOString() || new Date().toISOString(),
         gpsCoordinates,
       }));
-    }
+    };
+    pendingDraftWrite.current = write;
+    const t = window.setTimeout(write, 400);
+    return () => window.clearTimeout(t);
   }, [formValues, currentStep, surveyStartTime, gpsCoordinates, draftKey]);
+  // Never lose the last keystrokes: flush on tab close and when leaving the page in-app.
+  useEffect(() => {
+    const flush = () => pendingDraftWrite.current?.();
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, []);
 
   /**
    * POST the given payload to /api/industry-survey. If the server reports the
@@ -727,19 +796,30 @@ const IndustrySurveyPage: React.FC = () => {
    * exactly once as a fresh save rather than getting permanently stuck
    * resubmitting against a dead ID.
    */
+  // The backend issues a secret edit token when a row is created; only its
+  // holder can update that row, so it travels with every save of this draft.
+  const editTokenKey = `${draftKey}_edit_token`;
   const saveSurvey = async (payload: Record<string, any>, retrying = false): Promise<Response> => {
+    const editToken = payload.id ? localStorage.getItem(editTokenKey) : null;
     const res = await fetch('/api/industry-survey', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(editToken ? { ...payload, edit_token: editToken } : payload),
     });
 
     if (!retrying && (res.status === 404 || res.status === 403) && payload.id) {
       localStorage.removeItem(`${draftKey}_db_id`);
+      localStorage.removeItem(editTokenKey);
       const { id, ...retryPayload } = payload;
       return saveSurvey(retryPayload, true);
+    }
+
+    if (res.ok) {
+      const body = await res.clone().json().catch(() => null);
+      if (body?.edit_token) localStorage.setItem(editTokenKey, body.edit_token);
     }
 
     return res;
@@ -756,6 +836,8 @@ const IndustrySurveyPage: React.FC = () => {
 
     // Save to local storage for instant resume
     localStorage.setItem(draftKey, JSON.stringify(draftData));
+    // The answers are safe now; confirm immediately instead of waiting on the server sync.
+    if (showPopup) setSaveDraftDialogOpen(true);
 
     // Sync draft to backend
     try {
@@ -790,19 +872,20 @@ const IndustrySurveyPage: React.FC = () => {
         const reason = body?.error && typeof body.error === 'string' ? body.error : null;
         console.warn('Draft saved locally but backend sync failed:', reason || res.status);
         if (showPopup) {
-          alert(
-            language === 'si'
-              ? `ෆෝරමය ඔබගේ උපාංගයේ සුරැකිණි, නමුත් සර්වරයට යැවීමට අසමත් විය.${reason ? ` (${reason})` : ''}`
-              : `Saved on this device, but syncing to the server failed.${reason ? ` (${reason})` : ''}`
-          );
+          setSaveDraftDialogOpen(false);
+          setGenericAlertPopup({
+            open: true, tone: 'warning',
+            title: L('Saved on this device only', 'මෙම උපාංගයේ පමණක් සුරැකිණි', 'இந்தச் சாதனத்தில் மட்டும் சேமிக்கப்பட்டது'),
+            message: L(
+              `Your answers are safe here, but syncing to the server failed.${reason ? ` (${reason})` : ''}`,
+              `ඔබේ පිළිතුරු මෙහි සුරක්ෂිතයි, නමුත් සර්වරයට යැවීමට අසමත් විය.${reason ? ` (${reason})` : ''}`,
+              `உங்கள் பதில்கள் இங்கே பாதுகாப்பாக உள்ளன, ஆனால் சேவையகத்துடன் ஒத்திசைக்க முடியவில்லை.${reason ? ` (${reason})` : ''}`,
+            ),
+          });
         }
       }
     } catch (err) {
       console.error('Failed to sync draft to server', err);
-    }
-
-    if (showPopup) {
-      setSaveDraftDialogOpen(true);
     }
   };
 
@@ -878,47 +961,8 @@ const IndustrySurveyPage: React.FC = () => {
    * Replaces the per-step button blocks, which mixed a `space-between` row with
    * a full-width third button and so laid out inconsistently between steps.
    */
-  /* Shared surface for every dialog on the page, so the modals read as part of
-     the same system as the form card rather than default MUI paper. */
-  const dialogPaperProps = {
-    sx: {
-      borderRadius: `${T.radius}px`,
-      border: `1px solid ${T.line}`,
-      boxShadow: '0 24px 64px rgba(15,23,42,0.18)',
-
-      /* Phones: near-full-bleed with a small inset, and `dvh` so the sheet is
-         not cut off by mobile browser chrome. */
-      m: { xs: 1.5, sm: 4 },
-      width: { xs: 'calc(100% - 24px)', sm: 'auto' },
-      maxWidth: { xs: 'calc(100% - 24px)', sm: undefined },
-      maxHeight: { xs: 'calc(100dvh - 24px)', sm: 'calc(100% - 64px)' },
-
-      '& .MuiDialogTitle-root': {
-        fontWeight: 800, color: T.ink, letterSpacing: '-0.01em',
-        fontSize: { xs: '1.05rem', sm: '1.25rem' },
-        px: { xs: 2, sm: 3 },
-      },
-      '& .MuiDialogContent-root': { px: { xs: 2, sm: 3 } },
-
-      /* Actions stack on phones so each button keeps a full-width, 48px target
-         instead of three cramped buttons fighting for one row. */
-      '& .MuiDialogActions-root': {
-        flexDirection: { xs: 'column-reverse', sm: 'row' },
-        alignItems: { xs: 'stretch', sm: 'center' },
-        gap: 1,
-        px: { xs: 2, sm: 3 },
-        pb: { xs: 'calc(16px + env(safe-area-inset-bottom, 0px))', sm: 2 },
-        '& > :not(style) ~ :not(style)': { ml: { xs: 0, sm: 1 } },
-      },
-      '& .MuiButton-root': {
-        borderRadius: `${T.field}px`, textTransform: 'none', fontWeight: 700,
-        minHeight: { xs: 48, sm: 40 },
-        width: { xs: '100%', sm: 'auto' },
-      },
-      '& .MuiOutlinedInput-root': { borderRadius: `${T.field}px` },
-    },
-  };
-
+  // Called as StepNav({...}), not <StepNav/>: defined in render, a component
+  // identity would change every render and remount the buttons on each keystroke.
   const StepNav = ({ prev, next, submit, before }: { prev?: number; next?: number; submit?: boolean; before?: () => void }) => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, mt: 1 }}>
       {showErr && errorCount > 0 && (
@@ -979,7 +1023,7 @@ const IndustrySurveyPage: React.FC = () => {
             background: submit
               ? `linear-gradient(135deg, ${T.accent} 0%, #047857 100%)`
               : `linear-gradient(135deg, ${T.brand} 0%, ${T.brandDark} 100%)`,
-            boxShadow: submit ? '0 8px 20px rgba(5,150,105,0.28)' : '0 8px 20px rgba(37,99,235,0.26)',
+            boxShadow: submit ? '0 8px 20px rgba(5,150,105,0.28)' : '0 8px 20px rgba(21,128,61,0.26)',
             WebkitTapHighlightColor: 'transparent',
             '& .MuiButton-label, & span': { minWidth: 0 },
             '&:active': { filter: 'brightness(0.96)' },
@@ -990,68 +1034,18 @@ const IndustrySurveyPage: React.FC = () => {
         </Button>
       </Box>
 
-      <Dialog PaperProps={dialogPaperProps} open={duplicatePromptOpen} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CheckCircleRoundedIcon color="primary" />
-          <Typography variant="h6" fontWeight="bold">
-            {language === 'si' ? 'ඔබට දැනටමත් ගිණුමක් ඇත' : 'You Already Have a Submission'}
-          </Typography>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="body1">
-            {language === 'si' 
-              ? 'ඔබ දැනටමත් සමීක්ෂණයක් සම්පූර්ණ කර ඇත. ඔබට තවත් ව්‍යාපාරයක් සඳහා නව සමීක්ෂණයක් ආරම්භ කිරීමට අවශ්‍යද?'
-              : 'You have already submitted a survey or have one in progress. Do you need to add another business?'}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button 
-            onClick={() => {
-              setDuplicatePromptOpen(false);
-              navigate('/fill-data');
-            }}
-            variant="outlined"
-            color="inherit"
-          >
-            {language === 'si' ? 'නැත, මගේ උපකරණ පුවරුවට යන්න' : 'No, go to Dashboard'}
-          </Button>
-          <Button 
-            onClick={() => setDuplicatePromptOpen(false)} 
-            variant="contained" 
-            color="primary"
-          >
-            {language === 'si' ? 'ඔව්, නව සමීක්ෂණයක් ආරම්භ කරන්න' : 'Yes, add another one'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog PaperProps={dialogPaperProps} open={otpRequiredAlertOpen} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main' }}>
-          <ErrorOutlineRoundedIcon />
-          <Typography variant="h6" fontWeight="bold">
-            {language === 'si' ? 'අවධානයයි' : 'Attention'}
-          </Typography>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="body1">
-            {language === 'si' 
-              ? 'ඉදිරිපත් කිරීමට පෙර ඔබගේ දුරකථන අංකය තහවුරු කරන්න.' 
-              : 'Please verify your mobile number (OTP) before submitting.'}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button 
-            onClick={() => {
-              setOtpRequiredAlertOpen(false);
-              setCurrentStep(0);
-            }} 
-            variant="contained" 
-            color="primary"
-          >
-            {language === 'si' ? 'හරි' : 'OK'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <Button
+        type="button"
+        onClick={() => handleSaveDraft()}
+        startIcon={<BookmarkAddOutlinedIcon />}
+        sx={{
+          alignSelf: 'center', minHeight: 44, px: 2, borderRadius: '999px', textTransform: 'none', fontWeight: 700,
+          fontSize: '0.9rem', color: T.muted,
+          '@media (hover: hover)': { '&:hover': { color: T.brand, bgcolor: T.brandSoft } },
+        }}
+      >
+        {L('Save and finish later', 'සුරකා පසුව අවසන් කරන්න', 'சேமித்து பின்னர் முடி')}
+      </Button>
     </Box>
   );
 
@@ -1070,6 +1064,8 @@ const IndustrySurveyPage: React.FC = () => {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        setOtpCode('');
+        setOtpError(null);
         setOtpDialogOpen(true);
       } else if (res.status === 429) {
         setGenericAlertPopup({ open: true, title: language === 'si' ? 'අවධානයයි' : 'Attention', message: language === 'si' ? 'කරුණාකර මොහොතක් රැඳී නැවත උත්සාහ කරන්න' : 'Please wait a moment before requesting another code.' });
@@ -1097,19 +1093,24 @@ const IndustrySurveyPage: React.FC = () => {
         setIsMobileVerified(true);
         setMobileVerificationToken(data.verification_token ?? null);
         setOtpDialogOpen(false);
-        setGenericAlertPopup({ open: true, title: language === 'si' ? 'සාර්ථකයි' : 'Success', message: language === 'si' ? 'සාර්ථකයි' : 'Success' });
+        setOtpCode('');
+        setOtpError(null);
+        setGenericAlertPopup({ open: true, tone: 'success', title: L('Mobile number verified', 'ජංගම අංකය තහවුරු විය', 'கைபேசி எண் சரிபார்க்கப்பட்டது'), message: L('You can now submit the survey.', 'දැන් ඔබට සමීක්ෂණය ඉදිරිපත් කළ හැක.', 'இப்போது கணக்கெடுப்பைச் சமர்ப்பிக்கலாம்.') });
       } else {
-        setGenericAlertPopup({ open: true, title: language === 'si' ? 'අවධානයයි' : 'Attention', message: language === 'si' ? 'වැරදි කේතයකි' : 'Invalid OTP' });
+        setOtpError(L('That code is not correct. Check the SMS and try again.', 'එම කේතය නිවැරදි නොවේ. SMS පණිවිඩය පරීක්ෂා කර නැවත උත්සාහ කරන්න.', 'அந்தக் குறியீடு தவறு. SMS ஐச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.'));
       }
     } catch {
-      setGenericAlertPopup({ open: true, title: language === 'si' ? 'දෝෂයකි' : 'Error', message: language === 'si' ? 'දෝෂයක් ඇතිවිය' : 'Error' });
+      setOtpError(L('Could not reach the server. Please try again.', 'සර්වරයට සම්බන්ධ විය නොහැකි විය. නැවත උත්සාහ කරන්න.', 'சேவையகத்தை அடைய முடியவில்லை. மீண்டும் முயற்சிக்கவும்.'));
     } finally {
       setOtpVerifying(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const failAlert = (title: string, message: string) => setGenericAlertPopup({ open: true, tone: 'danger', title, message });
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     const endTime = new Date();
     const existingId = localStorage.getItem(`${draftKey}_db_id`);
     const regNumber = formValues['b_reg_no'] || '';
@@ -1128,7 +1129,8 @@ const IndustrySurveyPage: React.FC = () => {
       // registration-number query, an admin export, a future report) had to
       // either handle both shapes forever or silently miss one of them.
       form_data: {
-        formValues: { ...formValues, b_reg_no: regNumber },
+        // Age is recomputed at submission so it is correct as of the day the survey is sent.
+        formValues: { ...formValues, b_reg_no: regNumber, ...(formValues['q_dob'] ? { q_dob_age: formatDobAge(formValues['q_dob']) } : {}) },
         currentStep,
         surveyStartTime: surveyStartTime?.toISOString(),
         gpsCoordinates,
@@ -1157,21 +1159,13 @@ const IndustrySurveyPage: React.FC = () => {
         if (response.status === 422 && reason?.toLowerCase().includes('verif')) {
           setOtpRequiredAlertOpen(true);
         } else if (response.status === 403) {
-          alert(language === 'si'
-            ? 'මෙම සමීක්ෂණය සංස්කරණය කිරීමට ඔබට අවසර නැත.'
-            : 'You do not have permission to modify this survey.');
+          failAlert(L('Not allowed', 'අවසර නැත', 'அனுமதி இல்லை'), L('You do not have permission to modify this survey.', 'මෙම සමීක්ෂණය සංස්කරණය කිරීමට ඔබට අවසර නැත.', 'இந்தக் கணக்கெடுப்பை மாற்ற உங்களுக்கு அனுமதி இல்லை.'));
         } else if (response.status === 409) {
-          alert(language === 'si'
-            ? 'මෙම සමීක්ෂණය දැනටමත් අනුමත කර ඇති බැවින් වෙනස් කළ නොහැක.'
-            : 'This survey has already been approved and can no longer be modified.');
-        } else if (response.status === 401) {
-          alert(language === 'si'
-            ? 'ඔබගේ සැසිය කල් ඉකුත් වී ඇත. කරුණාකර නැවත පිවිසෙන්න.'
-            : 'Your session has expired. Please log in again.');
+          failAlert(L('Already approved', 'දැනටමත් අනුමතයි', 'ஏற்கனவே அங்கீகரிக்கப்பட்டது'), L('This survey has already been approved and can no longer be changed.', 'මෙම සමීක්ෂණය දැනටමත් අනුමත කර ඇති බැවින් වෙනස් කළ නොහැක.', 'இந்தக் கணக்கெடுப்பு ஏற்கனவே அங்கீகரிக்கப்பட்டதால் மாற்ற முடியாது.'));
+        } else if (response.status === 429) {
+          failAlert(L('Please wait', 'මොහොතක් රැඳී සිටින්න', 'சற்று காத்திருங்கள்'), L('Too many attempts. Please wait a minute and try again.', 'උත්සාහයන් වැඩියි. මිනිත්තුවක් රැඳී නැවත උත්සාහ කරන්න.', 'அதிக முயற்சிகள். ஒரு நிமிடம் காத்திருந்து மீண்டும் முயற்சிக்கவும்.'));
         } else {
-          alert(language === 'si'
-            ? `සමීක්ෂණය ඉදිරිපත් කිරීමට අසමත් විය.${reason ? ` (${reason})` : ''}`
-            : `Failed to submit the survey.${reason ? ` (${reason})` : ''} Please try again.`);
+          failAlert(L('Could not submit', 'ඉදිරිපත් කළ නොහැකි විය', 'சமர்ப்பிக்க முடியவில்லை'), `${L('Your answers are still saved on this device. Please try again.', 'ඔබේ පිළිතුරු තවමත් මෙම උපාංගයේ සුරැකී ඇත. නැවත උත්සාහ කරන්න.', 'உங்கள் பதில்கள் இந்தச் சாதனத்தில் சேமிக்கப்பட்டுள்ளன. மீண்டும் முயற்சிக்கவும்.')}${reason ? ` (${reason})` : ''}`);
         }
         return;
       }
@@ -1183,13 +1177,19 @@ const IndustrySurveyPage: React.FC = () => {
         endTime: endTime.toLocaleTimeString(),
         regNumber: publishedRegNumber,
       });
+      setSubmitDialogOpen(false);
       setSuccessDialogOpen(true);
 
+      // Answers include NIC and phone numbers; don't leave them in browser storage once submitted.
+      pendingDraftWrite.current = null;
       localStorage.removeItem(draftKey);
       localStorage.removeItem(`${draftKey}_db_id`);
+      localStorage.removeItem(editTokenKey);
     } catch (error) {
       console.error('Submission error:', error);
-      alert(language === 'si' ? 'දෝෂයක් ඇතිවිය. කරුණාකර නැවත උත්සාහ කරන්න.' : 'Failed to submit the survey. Please try again.');
+      failAlert(L('Connection problem', 'සම්බන්ධතා ගැටලුවක්', 'இணைப்புச் சிக்கல்'), L('Could not reach the server. Your answers are still saved on this device. Please try again.', 'සර්වරයට සම්බන්ධ විය නොහැකි විය. ඔබේ පිළිතුරු තවමත් මෙම උපාංගයේ සුරැකී ඇත. නැවත උත්සාහ කරන්න.', 'சேவையகத்தை அடைய முடியவில்லை. உங்கள் பதில்கள் இந்தச் சாதனத்தில் சேமிக்கப்பட்டுள்ளன.'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1206,25 +1206,124 @@ const IndustrySurveyPage: React.FC = () => {
   }[language] || 'Note: This survey covers all production, services, sales, industries and business establishments within the Grama Niladhari Division. Please answer all questions. Mark "Not Applicable" for irrelevant questions.';
 
 
+  /* ── GPS capture (used by the GPS dialog and its retry buttons) ──────────── */
+  const isInsideBoundary = (lat: number, lng: number): boolean => {
+    const boundary = gnData?.gnByCcode?.boundary;
+    if (!boundary) return true;
+    if (boundary.polygons && boundary.polygons.length > 0) {
+      try {
+        const polygons: number[][][] = typeof boundary.polygons === 'string' ? JSON.parse(boundary.polygons) : boundary.polygons;
+        for (const ring of polygons) {
+          let inside = false;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][1], yi = ring[i][0]; // [lng, lat]
+            const xj = ring[j][1], yj = ring[j][0];
+            const intersect = ((yi > lng) !== (yj > lng)) && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+          }
+          if (inside) return true;
+        }
+        return false;
+      } catch {
+        return lat >= boundary.minLat && lat <= boundary.maxLat && lng >= boundary.minLng && lng <= boundary.maxLng;
+      }
+    }
+    const buffer = 0.02; // ~2 km around the bounding box
+    return lat >= boundary.minLat - buffer && lat <= boundary.maxLat + buffer && lng >= boundary.minLng - buffer && lng <= boundary.maxLng + buffer;
+  };
+
+  const captureGps = () => {
+    setGpsErrorPopup(null);
+    if (!navigator.geolocation) {
+      setGpsErrorPopup(L('This browser cannot share your location.', 'ඔබගේ බ්‍රවුසරය ස්ථානය බෙදා ගැනීමට සහය නොදක්වයි.', 'இந்த உலாவி உங்கள் இருப்பிடத்தைப் பகிர முடியாது.'));
+      return;
+    }
+    setGpsChecking(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setGpsChecking(false);
+        const { latitude: lat, longitude: lng } = position.coords;
+        setShowGpsPopup(false);
+        if (isInsideBoundary(lat, lng)) setGpsCoordinates({ lat, lng });
+        else setGpsWrongLocationPopup({ lat, lng });
+      },
+      (error) => {
+        setGpsChecking(false);
+        let msg = L('We could not get your location.', 'ස්ථානය ලබා ගැනීමට නොහැකි විය.', 'உங்கள் இருப்பிடத்தைப் பெற முடியவில்லை.');
+        if (error.code === error.PERMISSION_DENIED) msg = L('Location access is blocked for this site.', 'මෙම වෙබ් අඩවියට ස්ථාන අවසරය අවහිර කර ඇත.', 'இந்தத் தளத்திற்கு இருப்பிட அணுகல் தடுக்கப்பட்டுள்ளது.');
+        else if (error.code === error.POSITION_UNAVAILABLE) msg = L('Your location is not available right now.', 'ඔබේ ස්ථානය දැනට ලබා ගත නොහැක.', 'உங்கள் இருப்பிடம் தற்போது கிடைக்கவில்லை.');
+        else if (error.code === error.TIMEOUT) msg = L('Finding your location took too long.', 'ස්ථානය සොයා ගැනීමට වැඩි කාලයක් ගත විය.', 'இருப்பிடத்தைக் கண்டறிய அதிக நேரம் ஆனது.');
+        setGpsErrorPopup(msg);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  };
+
+  // Business type chosen on the GN landing page (?type=slug), applied once the survey starts.
+  useEffect(() => {
+    if (!presetType || !surveyStartTime || presetAppliedFor.current === presetType || businessCategories.length === 0) return;
+    if (formValues['b_type']) { presetAppliedFor.current = presetType; return; }
+    const match = businessCategories.find((c: any) => c.slug === presetType);
+    presetAppliedFor.current = presetType;
+    if (!match) return;
+    setSelectedCategory(match);
+    setFormValues(prev => ({ ...prev, b_type: match.slug, b_type_name: match.nameEn }));
+  }, [presetType, surveyStartTime, businessCategories, formValues['b_type']]);
+
+  const answeredCount = Object.entries(formValues).filter(([k, v]) => v && String(v).trim() && !k.endsWith('_name')).length;
+  const maskedMobile = (formValues['b_mobile'] || '').replace(/\d(?=\d{3})/g, '•');
+  const gnLookupFailed = !!ccode && !gnLoading && !gnData?.gnByCcode;
+
   const mockDistricts = gnData?.gnByCcode ? [{ id: 'mock-dist', nameEn: gnData.gnByCcode.disEn }] : [];
   const mockDs = gnData?.gnByCcode ? [{ divisionalSecretariatCode: 'mock-ds', dsEn: gnData.gnByCcode.dsEn }] : [];
   const mockGns = gnData?.gnByCcode ? [{ id: ccode, CCODE: ccode, nameEn: gnData.gnByCcode.nameEn }] : [];
 
   return (
-    <Box>
-      <GnTopHeaderBar
-        districts={mockDistricts}
-        selectedDistrict={mockDistricts.length ? 'mock-dist' : ''}
-        dsDivisions={mockDs}
-        selectedCity={mockDs.length ? 'mock-ds' : ''}
-        gramaNiladharis={mockGns}
-        selectedGN={mockGns.length ? ccode : ''}
-        {...{ activeCcode: ccode, activeGnObj: gnName ? { nameEn: gnName } : null }}
-        userName={getUserName() || ''}
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: T.canvasTop }}>
+      <SiteTopBar
+        lang={lang}
+        onLanguage={(l) => setLanguage(l)}
+        onLogo={() => navigate(gnHomeUrl)}
+        logoLabel={L('Back to the area page', 'ප්‍රදේශ පිටුවට', 'பகுதிப் பக்கத்திற்கு')}
+        action={
+          <ButtonBase
+            onClick={() => navigate(gnHomeUrl)}
+            aria-label={L('Back to the area page', 'ප්‍රදේශ පිටුවට', 'பகுதிப் பக்கத்திற்கு')}
+            sx={{
+              display: 'inline-flex', alignItems: 'center', gap: 0.75, minHeight: 44, minWidth: 44, px: { xs: 1.25, sm: 2 },
+              borderRadius: '999px', border: `1.5px solid ${T.line}`, color: T.ink, fontWeight: 700, fontSize: '0.92rem',
+              transition: 'border-color 160ms ease, background-color 160ms ease',
+              '&:hover': { borderColor: T.brand, bgcolor: T.brandSoft },
+              '&:focus-visible': { outline: '3px solid #FFC233', outlineOffset: 2 },
+            }}
+          >
+            <ArrowBackIosNewRoundedIcon sx={{ fontSize: '0.95rem' }} />
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {areaName || L('Back', 'ආපසු', 'பின்')}
+            </Box>
+          </ButtonBase>
+        }
       />
+      <Box sx={{ position: 'relative', zIndex: 2, pt: { xs: 1.5, md: 2 } }}>
+        <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+          <GnTopHeaderBar
+            districts={mockDistricts}
+            selectedDistrict={mockDistricts.length ? 'mock-dist' : ''}
+            dsDivisions={mockDs}
+            selectedCity={mockDs.length ? 'mock-ds' : ''}
+            gramaNiladharis={mockGns}
+            selectedGN={mockGns.length ? ccode : ''}
+            {...{ activeCcode: ccode, activeGnObj: gnName ? { nameEn: gnName } : null }}
+            userName={getUserName() || ''}
+            hideCategoryRail
+            hideSearch
+          />
+        </Container>
+      </Box>
 
       <SurveyKeyframes />
 
+      <Box component="main" sx={{ flex: 1 }}>
       {surveyStartTime && !showGpsPopup && (
         <Box
           sx={{
@@ -1302,7 +1401,7 @@ const IndustrySurveyPage: React.FC = () => {
                       '& fieldset': { borderColor: T.line },
                       '&:hover fieldset': { borderColor: '#c7d2e2' },
                       '&.Mui-focused fieldset': { borderColor: T.brand, borderWidth: '1.5px' },
-                      '&.Mui-focused': { boxShadow: '0 0 0 4px rgba(37,99,235,0.10)' },
+                      '&.Mui-focused': { boxShadow: '0 0 0 4px rgba(21,128,61,0.10)' },
                     },
                     '& .MuiInputBase-input': { color: T.ink, fontWeight: 500 },
 
@@ -1467,40 +1566,6 @@ const IndustrySurveyPage: React.FC = () => {
                         />
                       )}
                     />
-                    {/* Breadcrumb scrolls inside its own box so a long trail can
-                        never widen the page on a phone. */}
-                    {selectedCategory && (
-                      <Box
-                        sx={{
-                          mt: 1, border: '1px solid', borderColor: 'divider',
-                          borderRadius: `${T.field}px`, overflow: 'hidden',
-                          maxWidth: '100%',
-                        }}
-                      >
-                        <Box sx={{ overflowX: 'auto', overscrollBehaviorX: 'contain' }}>
-                        <Table size="small" sx={{ minWidth: 320 }}>
-                          <TableHead>
-                            <TableRow sx={{ bgcolor: 'primary.main' }}>
-                              <TableCell sx={{ color: 'white', fontWeight: 700, width: '40%' }}>{language === 'si' ? 'මට්ටම' : language === 'ta' ? 'நிலை' : 'Level'}</TableCell>
-                              <TableCell sx={{ color: 'white', fontWeight: 700 }}>{language === 'si' ? 'නම' : language === 'ta' ? 'பெயர்' : 'Name'}</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {selectedCategory.breadcrumb.split(' > ').map((part: string, i: number) => (
-                              <TableRow key={i} sx={{ bgcolor: i % 2 === 0 ? 'grey.50' : 'white' }}>
-                                <TableCell>
-                                  <Chip label={`Level ${i + 1}`} size="small" color={i === selectedCategory.depth ? 'primary' : 'default'} />
-                                </TableCell>
-                                <TableCell>
-                                  <Typography variant="body2" fontWeight={i === selectedCategory.depth ? 700 : 400}>{part}</Typography>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        </Box>
-                      </Box>
-                    )}
                   </Box>
 
                   <Box>
@@ -1526,22 +1591,17 @@ const IndustrySurveyPage: React.FC = () => {
                     />
                   </Box>
 
-                  <StepNav
-                    next={nextActiveStep(0)}
-                    before={() => {
+                  {StepNav({
+                    next: nextActiveStep(0),
+                    before: () => {
                       if (!formValues['q_owner_name'] && formValues['b_owner_name']) {
                         setFormValues(prev => ({ ...prev, q_owner_name: prev['b_owner_name'] }));
                       }
                       if (!formValues['q_nic'] && formValues['b_nic']) {
-                        const { dob, age } = extractNICDetails(formValues['b_nic']);
-                        setFormValues(prev => ({
-                          ...prev,
-                          q_nic: prev['b_nic'],
-                          q_dob_age: (dob && age) ? `${dob} / ${age}` : '',
-                        }));
+                        setFormValues(prev => applyNicToDob({ ...prev, q_nic: prev['b_nic'] }, undefined, prev['b_nic']));
                       }
-                    }}
-                  />
+                    },
+                  })}
                 </Box>
               )}
               {currentStep === 1 && (
@@ -1571,16 +1631,56 @@ const IndustrySurveyPage: React.FC = () => {
                     <TextField fullWidth variant="outlined" size="small" value={formValues['q_nic'] || ''}
                       onChange={(e) => {
                         const val = e.target.value;
-                        handleInputChange('q_nic', val);
-                        const { dob, age } = extractNICDetails(val);
-                        handleInputChange('q_dob_age', (dob && age) ? `${dob} / ${age}` : '');
+                        setFormValues(prev => applyNicToDob({ ...prev, q_nic: val }, prev['q_nic'], val));
                       }}
                     />
                   </Box>
 
                   <Box>
                     <QuestionLabel fieldKey="q_dob_age" text={getDynamicLabel('q_dob_age', 'Date of Birth / Age', 'උපන් දිනය / වයස', 'பிறந்த தேதி / வயது')} />
-                    <TextField fullWidth variant="outlined" size="small" value={formValues['q_dob_age'] || ''} disabled sx={{ bgcolor: 'grey.100' }} />
+                    {(() => {
+                      const dob = formValues['q_dob'] || '';
+                      const age = calcAge(dob);
+                      const nicDob = dobFromNIC(formValues['q_nic']);
+                      const mismatch = !!dob && !!nicDob && dob !== nicDob;
+                      return (
+                        <>
+                          <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'stretch' }}>
+                            <TextField
+                              type="date"
+                              size="small"
+                              value={dob}
+                              onChange={(e) => setDob(e.target.value)}
+                              inputProps={{
+                                min: MIN_DOB,
+                                max: todayIso(),
+                                'aria-label': L('Date of birth', 'උපන් දිනය', 'பிறந்த தேதி'),
+                              }}
+                              sx={{ flex: 1, minWidth: 0 }}
+                            />
+                            <Box
+                              aria-live="polite"
+                              sx={{
+                                minWidth: 104, px: 1.5, display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                                border: `1px solid ${T.line}`, borderRadius: `${T.field}px`, bgcolor: age !== null ? T.brandSoft : '#f8fafc',
+                              }}
+                            >
+                              <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, lineHeight: 1.2 }}>
+                                {L('Age', 'වයස', 'வயது')}
+                              </Typography>
+                              <Typography sx={{ fontSize: '1rem', fontWeight: 800, color: age !== null ? T.ink : T.faint, lineHeight: 1.3 }}>
+                                {age !== null ? L(`${age} years`, `අවු. ${age}`, `${age} வயது`) : '—'}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          {mismatch && (
+                            <Typography sx={{ mt: 0.75, fontSize: '0.8rem', color: '#B45309' }}>
+                              {L(`This differs from the NIC (${nicDob}). Please check it.`, `මෙය ජා.හැ. අංකයේ දිනයට (${nicDob}) වෙනස්ය. කරුණාකර පරීක්ෂා කරන්න.`, `இது NIC தேதியிலிருந்து (${nicDob}) வேறுபடுகிறது. சரிபார்க்கவும்.`)}
+                            </Typography>
+                          )}
+                        </>
+                      );
+                    })()}
                   </Box>
 
                   <Box>
@@ -1628,7 +1728,7 @@ const IndustrySurveyPage: React.FC = () => {
                     <TextField fullWidth variant="outlined" size="small" value={formValues['q_prev_occupation'] || ''} onChange={(e) => handleInputChange('q_prev_occupation', e.target.value)} />
                   </Box>
 
-                  <StepNav prev={previousActiveStep(1)} next={nextActiveStep(1)} />
+                  {StepNav({ prev: previousActiveStep(1), next: nextActiveStep(1) })}
                 </Box>
               )}
 
@@ -1641,530 +1741,384 @@ const IndustrySurveyPage: React.FC = () => {
         </Box>
       )}
 
-      {/* Success Dialog */}
-      <Dialog PaperProps={dialogPaperProps} open={successDialogOpen} onClose={() => { setSuccessDialogOpen(false); navigate('/gnpage'); }} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'success.main', display: 'flex', alignItems: 'center', gap: 1 }}>
-          {language === 'si' ? 'සාර්ථකයි!' : language === 'ta' ? 'வெற்றி!' : 'Success!'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" mb={2}>
-            {language === 'si' ? 'සමීක්ෂණය සාර්ථකව ඉදිරිපත් කරන ලදි.' : language === 'ta' ? 'கணக்கெடுப்பு வெற்றிகரமாக சமர்ப்பிக்கப்பட்டது.' : 'Survey submitted successfully!'}
-          </Typography>
-          {submitSuccessData && (
-            <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 2 }}>
-              <Typography variant="body2" mb={1}>
-                <strong>{language === 'si' ? 'ලියාපදිංචි අංකය:' : language === 'ta' ? 'பதிவு எண்:' : 'Registration number:'}</strong> {submitSuccessData.regNumber}
-              </Typography>
-              <Typography variant="body2" mb={1}>
-                <strong>{language === 'si' ? 'ආරම්භක වේලාව:' : language === 'ta' ? 'தொடக்க நேரம்:' : 'Start Time:'}</strong> {submitSuccessData.startTime}
-              </Typography>
-              <Typography variant="body2">
-                <strong>{language === 'si' ? 'අවසන් වේලාව:' : language === 'ta' ? 'முடிவு நேரம்:' : 'End Time:'}</strong> {submitSuccessData.endTime}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0, gap: 1, flexWrap: 'wrap' }}>
-          {submitSuccessData?.regNumber && (
-            <Button variant="contained" color="success" onClick={() => { setSuccessDialogOpen(false); navigate(`/business/${encodeURIComponent(submitSuccessData.regNumber)}`); }}>
-              {language === 'si' ? 'ව්‍යාපාර පිටුව බලන්න' : language === 'ta' ? 'வணிகப் பக்கத்தைப் பார்க்க' : 'View business page'}
-            </Button>
-          )}
-          <Button variant="outlined" onClick={() => { setSuccessDialogOpen(false); navigate('/gnpage'); }}>
-            {language === 'si' ? 'හරි' : language === 'ta' ? 'சரி' : 'OK'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* ── Location confirmation (opens immediately; details fill in as they load) ── */}
+      <SurveyDialog
+        open={!!ccode && !locationConfirmed && !showLocationSelector}
+        tone={gnLookupFailed ? 'warning' : 'brand'}
+        icon={gnLookupFailed ? <LocationOffRoundedIcon /> : <PlaceRoundedIcon />}
+        title={gnLookupFailed
+          ? L('We could not find this area', 'මෙම ප්‍රදේශය සොයා ගත නොහැකි විය', 'இந்தப் பகுதியைக் கண்டுபிடிக்க முடியவில்லை')
+          : L('Is this your area?', 'මෙය ඔබේ ප්‍රදේශයද?', 'இது உங்கள் பகுதியா?')}
+        subtitle={gnLookupFailed
+          ? L('The link may be out of date. Please choose your Grama Niladhari division.', 'සබැඳිය යල් පැන ගොස් තිබිය හැක. කරුණාකර ඔබේ ග්‍රාම නිලධාරී වසම තෝරන්න.', 'இணைப்பு காலாவதியாகியிருக்கலாம். உங்கள் கிராம அலுவலர் பிரிவைத் தேர்ந்தெடுக்கவும்.')
+          : L('Your business will be recorded under this Grama Niladhari division.', 'ඔබේ ව්‍යාපාරය මෙම ග්‍රාම නිලධාරී වසම යටතේ සටහන් වේ.', 'உங்கள் வணிகம் இந்தக் கிராம அலுவலர் பிரிவின் கீழ் பதிவு செய்யப்படும்.')}
+        actions={gnLookupFailed ? (
+          <DialogButton onClick={() => setShowLocationSelector(true)} startIcon={<MapRoundedIcon />}>
+            {L('Choose my area', 'මගේ ප්‍රදේශය තෝරන්න', 'என் பகுதியைத் தேர்ந்தெடு')}
+          </DialogButton>
+        ) : (
+          <>
+            <DialogButton kind="secondary" onClick={() => setShowLocationSelector(true)}>
+              {L('No, change area', 'නැත, වෙනස් කරන්න', 'இல்லை, மாற்று')}
+            </DialogButton>
+            <DialogButton
+              endIcon={<ArrowForwardRoundedIcon />}
+              onClick={() => {
+                setLocationConfirmed(true);
+                if (localStorage.getItem(`survey_draft_${ccode}`)) setShowResumePopup(true);
+                else setShowMetadataPopup(true);
+              }}
+            >
+              {L('Yes, continue', 'ඔව්, ඉදිරියට', 'ஆம், தொடர்க')}
+            </DialogButton>
+          </>
+        )}
+      >
+        {!gnLookupFailed && (
+          <DetailList rows={[
+            { icon: <PlaceRoundedIcon />, label: L('Village / GN division', 'ග්‍රාම නිලධාරී වසම', 'கிராம அலுவலர் பிரிவு'), value: areaName ? <>{areaName} <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>({ccode})</Box></> : undefined },
+            { icon: <ApartmentRoundedIcon />, label: L('DS division', 'ප්‍රාදේශීය ලේකම් කොට්ඨාසය', 'பிரதேச செயலகப் பிரிவு'), value: gnPick('ds') },
+            { icon: <MapRoundedIcon />, label: L('District', 'දිස්ත්‍රික්කය', 'மாவட்டம்'), value: gnPick('dis') },
+          ]} />
+        )}
+      </SurveyDialog>
 
-      {/* Location Confirmation Dialog */}
-      <Dialog PaperProps={dialogPaperProps} open={!!ccode && !locationConfirmed && !showLocationSelector && !!gnData?.gnByCcode} onClose={() => { }}>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          {language === 'si' ? 'ස්ථානය තහවුරු කරන්න' : language === 'ta' ? 'இடத்தை உறுதிப்படுத்தவும்' : 'Confirm Location'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" mb={2}>
-            {language === 'si' ? 'මෙය ඔබගේ නිවැරදි ග්‍රාම නිලධාරී වසම දැයි තහවුරු කරන්න:' : language === 'ta' ? 'இது உங்களின் சரியான கிராம உத்தியோகத்தர் பிரிவு என்பதை உறுதிப்படுத்தவும்:' : 'Are you sure this is your correct Village / GN Division?'}
-          </Typography>
-          <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 2 }}>
-            <Typography variant="body2"><strong>{language === 'si' ? 'දිස්ත්‍රික්කය:' : language === 'ta' ? 'மாவட்டம்:' : 'District:'}</strong> {gnData?.gnByCcode?.disEn}</Typography>
-            <Typography variant="body2"><strong>{language === 'si' ? 'ප්‍රාදේශීය ලේකම් කොට්ඨාසය:' : language === 'ta' ? 'பிரதேச செயலகம்:' : 'DS Division:'}</strong> {gnData?.gnByCcode?.dsEn}</Typography>
-            <Typography variant="body2"><strong>{language === 'si' ? 'ග්‍රාම නිලධාරී වසම:' : language === 'ta' ? 'கிராம உத்தியோகத்தர் பிரிவு:' : 'Village / GN Division:'}</strong> {gnData?.gnByCcode?.nameEn}</Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={() => setShowLocationSelector(true)}
-          >
-            {language === 'si' ? 'නැත, වෙනස් කරන්න' : language === 'ta' ? 'இல்லை, மாற்றவும்' : 'No, Change'}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => {
-              setLocationConfirmed(true);
-              const draftStr = localStorage.getItem(`survey_draft_${ccode}`);
-              if (draftStr) {
-                setShowResumePopup(true);
-              } else {
+      {/* ── Resume an unfinished survey ── */}
+      <SurveyDialog
+        open={showResumePopup}
+        tone="info"
+        icon={<HistoryRoundedIcon />}
+        title={L('Pick up where you left off?', 'ඔබ නතර කළ තැනින් දිගටම කරගෙන යනවාද?', 'நிறுத்திய இடத்திலிருந்து தொடரவா?')}
+        subtitle={L('You have an unfinished survey for this area. Your earlier answers are saved on this device.', 'මෙම ප්‍රදේශය සඳහා අසම්පූර්ණ සමීක්ෂණයක් ඇත. ඔබේ පෙර පිළිතුරු මෙම උපාංගයේ සුරැකී ඇත.', 'இந்தப் பகுதிக்கு முடிக்கப்படாத கணக்கெடுப்பு உள்ளது. உங்கள் முந்தைய பதில்கள் இந்தச் சாதனத்தில் சேமிக்கப்பட்டுள்ளன.')}
+        actions={
+          <>
+            <DialogButton
+              kind="ghost"
+              onClick={() => {
+                localStorage.removeItem(`survey_draft_${ccode}`);
+                localStorage.removeItem(`survey_draft_${ccode}_db_id`);
+                localStorage.removeItem(`survey_draft_${ccode}_edit_token`);
+                setFormValues({});
+                setCurrentStep(0);
+                setShowResumePopup(false);
                 setShowMetadataPopup(true);
-              }
-            }}
-          >
-            {language === 'si' ? 'ඔව්, නිවැරදියි' : language === 'ta' ? 'ஆம், சரியானது' : 'Yes, Proceed'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+              }}
+            >
+              {L('Start over', 'අලුතින් අරඹන්න', 'புதிதாகத் தொடங்கு')}
+            </DialogButton>
+            <DialogButton
+              endIcon={<ArrowForwardRoundedIcon />}
+              onClick={() => {
+                const draftStr = localStorage.getItem(`survey_draft_${ccode}`);
+                let started = new Date();
+                if (draftStr) {
+                  try {
+                    const draft = JSON.parse(draftStr);
+                    setFormValues(draft.formValues || {});
+                    setGpsCoordinates(draft.gpsCoordinates || null);
+                    if (draft.currentStep !== undefined) setCurrentStep(draft.currentStep);
+                    if (draft.surveyStartTime) started = new Date(draft.surveyStartTime);
+                  } catch { /* corrupt draft: start fresh with the current time */ }
+                }
+                setSurveyStartTime(started);
+                setShowResumePopup(false);
+              }}
+            >
+              {L('Resume survey', 'නැවත අරඹන්න', 'தொடர்க')}
+            </DialogButton>
+          </>
+        }
+      />
 
-      {/* Survey Metadata Popup */}
-      <Dialog PaperProps={dialogPaperProps} open={showMetadataPopup && !surveyStartTime} onClose={() => { }}>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          {language === 'si' ? 'සමීක්ෂණ තොරතුරු' : language === 'ta' ? 'கணக்கெடுப்பு தகவல்' : 'Survey Information'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <Typography variant="body1">
-              <strong>{language === 'si' ? 'ග්‍රාම නිලධාරි වසම:' : 'Village / GN Division:'}</strong> {gnData?.gnByCcode?.nameEn}
-            </Typography>
-            <Typography variant="body1">
-              <strong>{language === 'si' ? 'ප්‍රාදේශීය ලේකම් කොට්ඨාශය:' : 'DS Division:'}</strong> {gnData?.gnByCcode?.dsEn}
-            </Typography>
-            <Typography variant="body1">
-              <strong>{language === 'si' ? 'සමීක්ෂණ දිනය:' : 'Survey Date:'}</strong> {new Date().toLocaleDateString()}
-            </Typography>
-            <Typography variant="body1">
-              <strong>{language === 'si' ? 'සමීක්ෂකගේ නම:' : 'Surveyor Name:'}</strong> {surveyorName}
-            </Typography>
-            <Typography variant="body1">
-              <strong>{language === 'si' ? 'සමීක්ෂණ ආරම්භය:' : 'Start Time:'}</strong> {language === 'si' ? 'ස්වයංක්‍රීයව' : 'Auto'} (____:____)
-            </Typography>
-            <Typography variant="body1">
-              <strong>{language === 'si' ? 'අවසානය:' : 'End Time:'}</strong> {language === 'si' ? 'ස්වයංක්‍රීයව' : 'Auto'} (____:____)
-            </Typography>
-            <Typography variant="body2" color="textSecondary" mt={2}>
-              * {language === 'si' ? 'ඔබ OK බොත්තම ක්ලික් කළ විට ආරම්භක වේලාව සටහන් වේ. අවසන් වේලාව පෝරමය ඉදිරිපත් කිරීමේදී සටහන් වේ.' : 'Start time will be recorded when you click OK. End time will be recorded when you submit the form.'}
-            </Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button
-            variant="contained"
-            color="primary"
+      {/* ── Survey details before starting ── */}
+      <SurveyDialog
+        open={showMetadataPopup && !surveyStartTime}
+        icon={<AssignmentRoundedIcon />}
+        title={L('Ready to begin?', 'ආරම්භ කිරීමට සූදානම්ද?', 'தொடங்கத் தயாரா?')}
+        subtitle={L('The start time is recorded when you tap Start, and the end time when you submit.', 'ඔබ "අරඹන්න" තට්ටු කළ විට ආරම්භක වේලාව ද, ඉදිරිපත් කළ විට අවසන් වේලාව ද සටහන් වේ.', '"தொடங்கு" தட்டும்போது தொடக்க நேரமும், சமர்ப்பிக்கும்போது முடிவு நேரமும் பதிவாகும்.')}
+        actions={
+          <DialogButton
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+            endIcon={<ArrowForwardRoundedIcon />}
             onClick={() => {
               setSurveyStartTime(new Date());
               setShowMetadataPopup(false);
               setShowGpsPopup(true);
             }}
           >
-            OK
-          </Button>
-        </DialogActions>
-      </Dialog>
+            {L('Start survey', 'සමීක්ෂණය අරඹන්න', 'கணக்கெடுப்பைத் தொடங்கு')}
+          </DialogButton>
+        }
+      >
+        <DetailList rows={[
+          { icon: <PlaceRoundedIcon />, label: L('Village / GN division', 'ග්‍රාම නිලධාරී වසම', 'கிராம அலுவலர் பிரிவு'), value: areaName || undefined },
+          { icon: <ApartmentRoundedIcon />, label: L('DS division', 'ප්‍රාදේශීය ලේකම් කොට්ඨාසය', 'பிரதேச செயலகப் பிரிவு'), value: gnPick('ds') },
+          { icon: <EventRoundedIcon />, label: L('Survey date', 'සමීක්ෂණ දිනය', 'கணக்கெடுப்பு தேதி'), value: new Date().toLocaleDateString(language === 'si' ? 'si-LK' : language === 'ta' ? 'ta-LK' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) },
+          { icon: <PersonRoundedIcon />, label: L('Surveyor', 'සමීක්ෂකගේ නම', 'கணக்கெடுப்பாளர்'), value: surveyorName === 'Unknown' ? L('Not set', 'ලබා දී නැත', 'அமைக்கப்படவில்லை') : surveyorName },
+        ]} />
+      </SurveyDialog>
 
-      {/* GPS Confirmation Popup */}
-      <Dialog PaperProps={dialogPaperProps} open={showGpsPopup} onClose={() => { }}>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
-          📍 {language === 'si' ? 'භූගෝලීය ඛණ්ඩාංක (GPS)' : language === 'ta' ? 'புவியியல் ஆயத்தொலைவுகள் (GPS)' : 'GPS Coordinates'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            {language === 'si'
-              ? 'ඔබ දැනට සිටින්නේ නිවැරදි සමීක්ෂණ ස්ථානයේ ද? (ඔව් නම්, ස්ථානය ස්වයංක්‍රීයව සටහන් වේ)'
-              : 'Are you currently at the correct survey location? (If Yes, location will be recorded automatically)'}
-          </Typography>
-          {gnData?.gnByCcode && (
-            <Box sx={{ bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200', borderRadius: 2, p: 1.5 }}>
-              <Typography variant="caption" color="primary.main" fontWeight={700}>
-                {language === 'si' ? 'සමීක්ෂණ ස්ථානය:' : 'Survey Location:'}
-              </Typography>
-              <Typography variant="body2" fontWeight={600}>{gnData.gnByCcode.nameEn}</Typography>
-              <Typography variant="caption" color="text.secondary">{gnData.gnByCcode.dsEn} · {gnData.gnByCcode.disEn}</Typography>
-            </Box>
-          )}
-          {gpsChecking && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-              <CircularProgress size={20} />
-              <Typography variant="body2" color="text.secondary">
-                {language === 'si' ? 'GPS ස්ථානය ලබා ගනිමින් සිටී...' : 'Getting your GPS location...'}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0, gap: 1 }}>
-          <Button
-            variant="outlined"
-            color="error"
-            disabled={gpsChecking}
-            onClick={() => {
-              setShowGpsPopup(false);
-            }}
-          >
-            {language === 'si' ? 'නැත' : 'No'}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={gpsChecking}
-            onClick={() => {
-              if (!navigator.geolocation) {
-                setGpsErrorPopup(language === 'si' ? 'ඔබගේ බ්‍රවුසරය GPS සඳහා සහය නොදක්වයි.' : 'Geolocation is not supported by this browser.');
-                return;
-              }
-              setGpsChecking(true);
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  setGpsChecking(false);
-                  const userLat = position.coords.latitude;
-                  const userLng = position.coords.longitude;
-                  const boundary = gnData?.gnByCcode?.boundary;
+      {/* ── GPS ── */}
+      <SurveyDialog
+        open={showGpsPopup && !gpsErrorPopup}
+        icon={<MyLocationRoundedIcon />}
+        title={L('Are you at the business right now?', 'ඔබ දැන් ව්‍යාපාරික ස්ථානයේ සිටිනවාද?', 'நீங்கள் இப்போது வணிக இடத்தில் இருக்கிறீர்களா?')}
+        subtitle={L('If yes, we will record its location from your phone. Nothing else on your device is accessed.', 'ඔව් නම්, ඔබේ දුරකථනයෙන් එහි ස්ථානය සටහන් කරමු. ඔබේ උපාංගයේ වෙනත් කිසිවක් භාවිත නොකෙරේ.', 'ஆம் எனில், உங்கள் தொலைபேசியிலிருந்து அதன் இருப்பிடத்தைப் பதிவு செய்வோம். வேறு எதுவும் அணுகப்படாது.')}
+        actions={
+          <>
+            <DialogButton kind="secondary" disabled={gpsChecking} onClick={() => setShowGpsPopup(false)}>
+              {L('No, skip', 'නැත, මඟ හරින්න', 'இல்லை, தவிர்')}
+            </DialogButton>
+            <DialogButton loading={gpsChecking} startIcon={<MyLocationRoundedIcon />} onClick={captureGps}>
+              {L('Yes, use my location', 'ඔව්, මගේ ස්ථානය', 'ஆம், என் இருப்பிடம்')}
+            </DialogButton>
+          </>
+        }
+      >
+        {gpsChecking ? (
+          <Callout tone="info" icon={<CircularProgress size={18} sx={{ color: 'inherit' }} />}>
+            {L('Finding your location… this can take a few seconds outdoors.', 'ඔබේ ස්ථානය සොයමින්… එළිමහනේ තත්පර කිහිපයක් ගත විය හැක.', 'இருப்பிடத்தைக் கண்டறிகிறது… சில விநாடிகள் ஆகலாம்.')}
+          </Callout>
+        ) : (
+          <DetailList rows={[{ icon: <PlaceRoundedIcon />, label: L('Survey area', 'සමීක්ෂණ ප්‍රදේශය', 'கணக்கெடுப்புப் பகுதி'), value: areaName ? [areaName, gnPick('ds')].filter(Boolean).join(', ') : undefined }]} />
+        )}
+      </SurveyDialog>
 
-                  // Check if inside boundary
-                  let isInside = false;
-                  if (boundary) {
-                    // First try polygon point-in-polygon check
-                    if (boundary.polygons && boundary.polygons.length > 0) {
-                      try {
-                        const polygons: number[][][] = typeof boundary.polygons === 'string'
-                          ? JSON.parse(boundary.polygons)
-                          : boundary.polygons;
-                        // Check against each polygon ring
-                        for (const ring of polygons) {
-                          let inside = false;
-                          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-                            const xi = ring[i][1], yi = ring[i][0]; // [lng, lat] format
-                            const xj = ring[j][1], yj = ring[j][0];
-                            const intersect = ((yi > userLng) !== (yj > userLng)) &&
-                              (userLat < (xj - xi) * (userLng - yi) / (yj - yi) + xi);
-                            if (intersect) inside = !inside;
-                          }
-                          if (inside) { isInside = true; break; }
-                        }
-                      } catch (e) {
-                        // Fall back to bounding box
-                        isInside = userLat >= boundary.minLat && userLat <= boundary.maxLat &&
-                          userLng >= boundary.minLng && userLng <= boundary.maxLng;
-                      }
-                    } else {
-                      // Bounding box check (with 0.02° ~2km buffer)
-                      const buffer = 0.02;
-                      isInside = userLat >= (boundary.minLat - buffer) && userLat <= (boundary.maxLat + buffer) &&
-                        userLng >= (boundary.minLng - buffer) && userLng <= (boundary.maxLng + buffer);
-                    }
-                  } else {
-                    // No boundary data — accept location as-is
-                    isInside = true;
-                  }
+      <SurveyDialog
+        open={!!gpsErrorPopup}
+        tone="danger"
+        icon={<LocationOffRoundedIcon />}
+        title={L('Location not available', 'ස්ථානය ලබා ගත නොහැක', 'இருப்பிடம் கிடைக்கவில்லை')}
+        subtitle={gpsErrorPopup || undefined}
+        actions={
+          <>
+            <DialogButton kind="secondary" disabled={gpsChecking} onClick={() => { setGpsErrorPopup(null); setShowGpsPopup(false); }}>
+              {L('Continue without it', 'එය නොමැතිව ඉදිරියට', 'அது இல்லாமல் தொடர்க')}
+            </DialogButton>
+            <DialogButton loading={gpsChecking} startIcon={<RefreshRoundedIcon />} onClick={captureGps}>
+              {L('Try again', 'නැවත උත්සාහ කරන්න', 'மீண்டும் முயற்சி')}
+            </DialogButton>
+          </>
+        }
+      >
+        <Callout tone="info" icon={<InfoRoundedIcon />}>
+          {L('Tap the lock icon next to the web address, allow Location, then try again.', 'ලිපිනය අසල ඇති අගුළු අයිකනය තට්ටු කර "Location" සඳහා අවසර දී නැවත උත්සාහ කරන්න.', 'இணைய முகவரிக்கு அருகிலுள்ள பூட்டு ஐகானைத் தட்டி, இருப்பிடத்தை அனுமதித்து மீண்டும் முயற்சிக்கவும்.')}
+        </Callout>
+      </SurveyDialog>
 
-                  if (isInside) {
-                    setGpsCoordinates({ lat: userLat, lng: userLng });
-                    setShowGpsPopup(false);
-                  } else {
-                    // Wrong location — show warning popup
-                    setGpsWrongLocationPopup({ lat: userLat, lng: userLng });
-                    setShowGpsPopup(false);
-                  }
-                },
-                (error) => {
-                  setGpsChecking(false);
-                  let errorMsg = language === 'si' ? 'ස්ථානය ලබා ගැනීමට නොහැකි විය.' : 'Failed to get location.';
-                  if (error.code === error.PERMISSION_DENIED) {
-                    errorMsg = language === 'si'
-                      ? 'ස්ථානය ලබා ගැනීමට අවසර ලබා දී නොමැත. කරුණාකර බ්‍රවුසරයේ සැකසුම් පරීක්ෂා කරන්න.'
-                      : 'Location permission denied. Please check your browser settings.';
-                  } else if (error.code === error.POSITION_UNAVAILABLE) {
-                    errorMsg = language === 'si' ? 'ස්ථාන තොරතුරු ලබා ගත නොහැක.' : 'Location information is unavailable.';
-                  } else if (error.code === error.TIMEOUT) {
-                    errorMsg = language === 'si' ? 'ස්ථානය ලබා ගැනීමේ කාලය ඉකුත් විය.' : 'The request to get your location timed out.';
-                  }
-                  setGpsErrorPopup(errorMsg);
-                },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-              );
-            }}
-          >
-            {gpsChecking ? <CircularProgress size={20} color="inherit" /> : (language === 'si' ? 'ඔව්' : 'Yes')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <SurveyDialog
+        open={!!gpsWrongLocationPopup}
+        tone="warning"
+        icon={<WarningAmberRoundedIcon />}
+        title={L('You seem to be outside this area', 'ඔබ මෙම ප්‍රදේශයෙන් පිටත සිටින බව පෙනේ', 'நீங்கள் இந்தப் பகுதிக்கு வெளியே இருப்பதாகத் தெரிகிறது')}
+        subtitle={L(`Your phone's location is not inside ${areaName || 'the selected GN division'}.`, `ඔබේ දුරකථනයේ ස්ථානය ${areaName || 'තෝරාගත් වසම'} තුළ නොවේ.`, `உங்கள் தொலைபேசியின் இருப்பிடம் ${areaName || 'தேர்ந்தெடுத்த பிரிவு'} உள்ளே இல்லை.`)}
+        actions={
+          <>
+            <DialogButton kind="secondary" startIcon={<RefreshRoundedIcon />} onClick={() => { setGpsWrongLocationPopup(null); setShowGpsPopup(true); }}>
+              {L('Try again', 'නැවත උත්සාහ කරන්න', 'மீண்டும் முயற்சி')}
+            </DialogButton>
+            <DialogButton kind="warning" onClick={() => { setGpsCoordinates(null); setGpsWrongLocationPopup(null); }}>
+              {L('Continue without location', 'ස්ථානය නොමැතිව ඉදිරියට', 'இருப்பிடம் இல்லாமல் தொடர்க')}
+            </DialogButton>
+          </>
+        }
+      >
+        <Callout tone="info" icon={<InfoRoundedIcon />}>
+          {L('If you continue, the location is not saved. All your other answers are saved as normal.', 'ඔබ ඉදිරියට ගියහොත් ස්ථානය සුරැකෙන්නේ නැත. අනෙක් සියලු පිළිතුරු සාමාන්‍ය පරිදි සුරැකේ.', 'தொடர்ந்தால் இருப்பிடம் சேமிக்கப்படாது. மற்ற பதில்கள் வழக்கம்போல் சேமிக்கப்படும்.')}
+        </Callout>
+      </SurveyDialog>
 
-      {/* Wrong Location Warning Popup */}
-      <Dialog PaperProps={dialogPaperProps} open={!!gpsWrongLocationPopup} onClose={() => { }} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'warning.dark', display: 'flex', alignItems: 'center', gap: 1 }}>
-          ⚠️ {language === 'si' ? 'ස්ථානය නිවැරදි නොවේ' : language === 'ta' ? 'தவறான இடம்' : 'Wrong Location'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="body1">
-              {language === 'si'
-                ? 'ඔබ දැනට සිටිනු ලබන ස්ථානය තෝරාගත් ග්‍රාම නිලධාරී වසමෙහි අයත් නොවේ. කරුණාකර නිවැරදි ස්ථානයේ සිට සමීක්ෂණය පුරවන්න.'
-                : language === 'ta'
-                  ? 'நீங்கள் தேர்ந்தெடுத்த கிராம உத்தியோகத்தர் பிரிவில் இல்லை. சரியான இடத்திலிருந்து கணக்கெடுப்பை பூர்த்தி செய்யவும்.'
-                  : 'You are not currently in the correct survey location (GN Division). Please fill the survey from the correct location.'}
-            </Typography>
-            {gpsWrongLocationPopup && (
-              <Box sx={{ bgcolor: 'warning.50', border: '1px solid', borderColor: 'warning.300', borderRadius: 2, p: 1.5 }}>
-                <Typography variant="caption" color="warning.dark" fontWeight={700} display="block">
-                  {language === 'si' ? 'ඔබගේ වර්තමාන ස්ථානය:' : 'Your current location:'}
-                </Typography>
-                <Typography variant="body2" fontFamily="monospace">
-                  {language === 'si' ? 'අක්ෂාංශ' : 'Lat'}: {gpsWrongLocationPopup.lat.toFixed(6)},&nbsp;
-                  {language === 'si' ? 'දේශාංශ' : 'Lng'}: {gpsWrongLocationPopup.lng.toFixed(6)}
-                </Typography>
-                {gnData?.gnByCcode?.boundary && (
-                  <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-                    {language === 'si' ? 'අපේක්ෂිත ප්‍රදේශය:' : 'Expected area:'} {gnData.gnByCcode.nameEn}
-                  </Typography>
-                )}
-              </Box>
-            )}
-            <Box sx={{ bgcolor: 'info.50', border: '1px solid', borderColor: 'info.200', borderRadius: 2, p: 1.5 }}>
-              <Typography variant="body2" color="info.dark">
-                {language === 'si'
-                  ? '"දිගටම" ක්ලික් කළ හොත්, ඔබේ ස්ථාන තොරතුරු සුරකිනු නොලැබේ, නමුත් අනෙකුත් සමීක්ෂණ දත්ත සුරකිනු ලැබේ.'
-                  : language === 'ta'
-                    ? '"தொடரவும்" கிளிக் செய்தால், இடம் சேமிக்கப்படாது, ஆனால் மற்ற தரவு சேமிக்கப்படும்.'
-                    : 'If you click "Continue", location will NOT be saved, but all other survey data will be saved normally.'}
-              </Typography>
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0, gap: 1, justifyContent: 'space-between' }}>
-          <Button
-            variant="outlined"
-            color="primary"
-            onClick={() => {
-              setGpsWrongLocationPopup(null);
-              setShowGpsPopup(true);
-            }}
-          >
-            🔄 {language === 'si' ? 'නැවත උත්සාහ කරන්න' : language === 'ta' ? 'மீண்டும் முயற்சிக்கவும்' : 'Try Again'}
-          </Button>
-          <Button
-            variant="contained"
-            color="warning"
-            sx={{ fontWeight: 'bold', color: 'white' }}
-            onClick={() => {
-              // Continue WITHOUT saving GPS coordinates
-              setGpsCoordinates(null);
-              setGpsWrongLocationPopup(null);
-            }}
-          >
-            {language === 'si' ? 'දිගටම' : language === 'ta' ? 'தொடரவும்' : 'Continue'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* ── Progress saved ── */}
+      <SurveyDialog
+        open={saveDraftDialogOpen}
+        onClose={() => setSaveDraftDialogOpen(false)}
+        tone="success"
+        icon={<CloudDoneRoundedIcon />}
+        title={L('Progress saved', 'ප්‍රගතිය සුරැකිණි', 'முன்னேற்றம் சேமிக்கப்பட்டது')}
+        subtitle={L(`Saved at step ${currentStep + 1}. Come back any time and you will continue from here.`, `පියවර ${currentStep + 1} හිදී සුරැකිණි. ඕනෑම වේලාවක පැමිණ මෙතැන් සිට දිගටම කළ හැක.`, `படி ${currentStep + 1} இல் சேமிக்கப்பட்டது. எப்போது வேண்டுமானாலும் வந்து இங்கிருந்து தொடரலாம்.`)}
+        actions={
+          <>
+            <DialogButton kind="secondary" onClick={() => { setSaveDraftDialogOpen(false); navigate(gnHomeUrl); }}>
+              {L('Leave for now', 'දැනට පිටවන්න', 'இப்போது வெளியேறு')}
+            </DialogButton>
+            <DialogButton onClick={() => setSaveDraftDialogOpen(false)}>
+              {L('Keep going', 'දිගටම කරන්න', 'தொடர்ந்து நிரப்பு')}
+            </DialogButton>
+          </>
+        }
+      />
 
-      {/* Save Draft Success Dialog */}
-      <Dialog PaperProps={dialogPaperProps} open={saveDraftDialogOpen} onClose={() => setSaveDraftDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ textAlign: 'center', fontWeight: 'bold', color: 'success.main', pt: 3 }}>
-          {language === 'si' ? 'ෆෝරමය සේව් කෙරිණ!' : language === 'ta' ? 'படிவம் சேமிக்கப்பட்டது!' : 'Progress Saved!'}
-        </DialogTitle>
-        <DialogContent sx={{ textAlign: 'center', pb: 1 }}>
-          <Typography variant="body1" sx={{ mb: 1 }}>
-            {language === 'si'
-              ? 'ඔබගේ තොරතුරු සාර්ථකව සේව් කෙරිණ. ඔබ ඊළඟ වර ෆෝරමය විවෘත කළ විට, ඔබ නතර කළ තැනින් නැවත ආරම්භ වේ.'
-              : language === 'ta'
-                ? 'உங்கள் தரவு சேமிக்கப்பட்டது. அடுத்த முறை படிவத்தை திறக்கும்போது, நீங்கள் நிறுத்திய இடத்திலிருந்து தொடரலாம்.'
-                : 'Your progress has been saved. When you return to this form, you can continue from where you left off.'}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {language === 'si' ? `සුරකින ලද පියවර: ${currentStep + 1}` : language === 'ta' ? `சேமித்த படி: ${currentStep + 1}` : `Saved at step: ${currentStep + 1}`}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ flexDirection: 'column', gap: 1, px: 3, pb: 3 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            fullWidth
-            sx={{ borderRadius: '20px', py: 1.5, fontWeight: 'bold' }}
-            onClick={() => {
-              setSaveDraftDialogOpen(false);
-              const lastGnUrl = localStorage.getItem('last_gn_url');
-              navigate(lastGnUrl || '/');
-            }}
-          >
-            🏠 {language === 'si' ? 'ප්‍රධාන පිටුවට යන්න' : language === 'ta' ? 'முகப்பு பக்கத்திற்கு செல்லவும்' : 'Go to Home Page'}
-          </Button>
-          <Button
-            variant="outlined"
-            fullWidth
-            sx={{ borderRadius: '20px', py: 1, fontWeight: 'bold' }}
-            onClick={() => setSaveDraftDialogOpen(false)}
-          >
-            {language === 'si' ? 'ෆෝරමය දිගටම කරන්න' : language === 'ta' ? 'படிவத்தை தொடரவும்' : 'Continue Filling Form'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Resume Draft Popup */}
-      <Dialog PaperProps={dialogPaperProps} open={showResumePopup} onClose={() => { }}>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          {language === 'si' ? 'අසම්පූර්ණ සමීක්ෂණයක් සොයා ගන්නා ලදී' : language === 'ta' ? 'முடிக்கப்படாத கணக்கெடுப்பு' : 'Unfinished Survey Found'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">
-            {language === 'si'
-              ? 'මෙම ග්‍රාම නිලධාරී වසම සඳහා ඔබ මින් පෙර ආරම්භ කළ අසම්පූර්ණ සමීක්ෂණයක් ඇත. ඔබ එය නැවත ආරම්භ කිරීමට හෝ අලුතින් සමීක්ෂණයක් ආරම්භ කිරීමට කැමතිද?'
-              : 'There is an unfinished survey for this Village. Do you want to resume where you left off, or start a new survey?'}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={() => {
-              localStorage.removeItem(`survey_draft_${ccode}`);
-              setShowResumePopup(false);
-              setShowMetadataPopup(true);
-            }}
-          >
-            {language === 'si' ? 'අලුතින් ආරම්භ කරන්න' : 'Start New'}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => {
-              const draftStr = localStorage.getItem(`survey_draft_${ccode}`);
-              if (draftStr) {
-                const draft = JSON.parse(draftStr);
-                setFormValues(draft.formValues || {});
-                setGpsCoordinates(draft.gpsCoordinates || null);
-                if (draft.currentStep !== undefined) {
-                  setCurrentStep(draft.currentStep);
-                }
-                if (draft.surveyStartTime) {
-                  setSurveyStartTime(new Date(draft.surveyStartTime));
-                }
-              }
-              setShowResumePopup(false);
-            }}
-          >
-            {language === 'si' ? 'නැවත ආරම්භ කරන්න' : 'Resume Survey'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Location Selector Modal */}
-      <LocationSelectorModal
+      {/* ── Location selector: the same picker the GN page uses ── */}
+      <GnLocationModal
         open={showLocationSelector}
-        onLocationSelected={(gn) => {
+        onClose={() => {
+          // Closed without choosing: back to the area confirmation when an area is
+          // already set, otherwise there is nothing to survey, so return home.
           setShowLocationSelector(false);
-          const formattedGnName = encodeURIComponent(gn.nameEn.replace(/ /g, '-'));
-          navigate(`/industry-survey/${formattedGnName}/${gn.CCODE}`, { state: { fromSelector: true } });
+          if (!ccode) navigate(gnHomeUrl);
+        }}
+        onLocationSelected={(gn) => {
+          const code = gn?.CCODE || gn?.ccode;
+          if (!code || !gn?.nameEn) return;
+          setShowLocationSelector(false);
+          const slug = encodeURIComponent(String(gn.nameEn).trim().replace(/\s+/g, '-'));
+          const query = presetType ? `?${new URLSearchParams({ type: presetType })}` : '';
+          // fromSelector: the area was just chosen, so skip re-confirming it.
+          navigate(`/industry-survey/${slug}/${encodeURIComponent(code)}${query}`, { state: { fromSelector: true } });
         }}
       />
 
+      {/* ── Confirm submission ── */}
+      <SurveyDialog
+        open={submitDialogOpen}
+        onClose={submitting ? undefined : () => setSubmitDialogOpen(false)}
+        icon={<SendRoundedIcon />}
+        title={L('Submit your survey?', 'සමීක්ෂණය ඉදිරිපත් කරනවාද?', 'கணக்கெடுப்பைச் சமர்ப்பிக்கவா?')}
+        subtitle={L('Check the details below. After submitting, your business gets its public page.', 'පහත විස්තර පරීක්ෂා කරන්න. ඉදිරිපත් කළ පසු ඔබේ ව්‍යාපාරයට පොදු පිටුවක් ලැබේ.', 'கீழே உள்ள விவரங்களைச் சரிபார்க்கவும். சமர்ப்பித்த பிறகு உங்கள் வணிகத்திற்கு பொதுப் பக்கம் கிடைக்கும்.')}
+        actions={
+          <>
+            <DialogButton kind="secondary" disabled={submitting} onClick={() => setSubmitDialogOpen(false)}>
+              {L('Keep reviewing', 'තවත් පරීක්ෂා කරන්න', 'மேலும் சரிபார்')}
+            </DialogButton>
+            <DialogButton loading={submitting} startIcon={<SendRoundedIcon />} onClick={handleSubmit}>
+              {L('Submit survey', 'ඉදිරිපත් කරන්න', 'சமர்ப்பி')}
+            </DialogButton>
+          </>
+        }
+      >
+        <DetailList rows={[
+          { icon: <CategoryRoundedIcon />, label: L('Business type', 'ව්‍යාපාර වර්ගය', 'வணிக வகை'), value: (selectedCategory && (language === 'si' ? selectedCategory.nameSi : language === 'ta' ? selectedCategory.nameTa : selectedCategory.nameEn)) || formValues['b_type_name'] || '—' },
+          { icon: <TagRoundedIcon />, label: L('Registration number', 'ලියාපදිංචි අංකය', 'பதிவு எண்'), value: formValues['b_reg_no'] || '—' },
+          { icon: <PlaceRoundedIcon />, label: L('Area', 'ප්‍රදේශය', 'பகுதி'), value: areaName || '—' },
+          { icon: <CheckCircleRoundedIcon />, label: L('Answers given', 'ලබා දුන් පිළිතුරු', 'அளித்த பதில்கள்'), value: String(answeredCount) },
+        ]} />
+      </SurveyDialog>
 
-      <Dialog PaperProps={dialogPaperProps} open={submitDialogOpen} onClose={() => setSubmitDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          {language === 'si' ? 'තහවුරු කරන්න' : 'Confirm Submission'}
-        </DialogTitle>
-        <DialogContent dividers>
-          <Typography mb={2}>
-            {language === 'si'
-              ? 'ඔබගේ සියලුම තොරතුරු නිවැරදි දැයි තහවුරු කරගන්න. ඉදිරිපත් කිරීමට පෙර අවශ්‍ය නම් ආපසු ගොස් පරීක්ෂා කළ හැක. ඔබ ඉදිරිපත් කළ පසු මෙම තොරතුරු පද්ධතියට සුරැකෙනු ඇත.'
-              : 'Please review all your details. You can scroll back and check before submitting. Once you click Done, the data will be securely saved to the database.'}
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            * Note: Saving up to {Object.keys(formValues).length} fields!
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button variant="outlined" onClick={() => setSubmitDialogOpen(false)}>
-            {language === 'si' ? 'අවලංගු කරන්න' : 'Cancel'}
-          </Button>
-          <Button variant="contained" color="success" sx={{ fontWeight: 'bold', px: 4 }} onClick={() => {
-            setSubmitDialogOpen(false);
-            handleSubmit(new Event('submit') as any);
-          }}>
-            {language === 'si' ? 'තහවුරු කර ඉදිරිපත් කරන්න' : 'Done / Confirm'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* ── OTP ── */}
+      <SurveyDialog
+        open={otpDialogOpen}
+        onClose={otpVerifying ? undefined : () => setOtpDialogOpen(false)}
+        tone="info"
+        icon={<SmsRoundedIcon />}
+        title={L('Enter the 6-digit code', 'අංක 6 කේතය ඇතුළත් කරන්න', '6 இலக்கக் குறியீட்டை உள்ளிடவும்')}
+        subtitle={L(`We sent it by SMS to ${maskedMobile || 'your mobile'}.`, `එය ${maskedMobile || 'ඔබේ ජංගම දුරකථනයට'} SMS මඟින් යවන ලදී.`, `${maskedMobile || 'உங்கள் கைபேசிக்கு'} SMS மூலம் அனுப்பப்பட்டது.`)}
+        actions={
+          <>
+            <DialogButton kind="ghost" disabled={otpVerifying || otpSending} onClick={handleSendOtp}>
+              {otpSending ? L('Sending…', 'යවමින්…', 'அனுப்புகிறது…') : L('Resend code', 'නැවත යවන්න', 'மீண்டும் அனுப்பு')}
+            </DialogButton>
+            <DialogButton loading={otpVerifying} disabled={otpCode.length !== 6} onClick={handleVerifyOtp}>
+              {L('Verify', 'තහවුරු කරන්න', 'சரிபார்')}
+            </DialogButton>
+          </>
+        }
+      >
+        <TextField
+          fullWidth
+          autoFocus
+          value={otpCode}
+          onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setOtpError(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && otpCode.length === 6 && !otpVerifying) handleVerifyOtp(); }}
+          error={!!otpError}
+          helperText={otpError || ' '}
+          placeholder="••••••"
+          inputProps={{
+            inputMode: 'numeric', autoComplete: 'one-time-code', maxLength: 6, 'aria-label': L('6-digit code', 'අංක 6 කේතය', '6 இலக்கக் குறியீடு'),
+            style: { textAlign: 'center', fontSize: '1.75rem', fontWeight: 800, letterSpacing: '0.5em', paddingLeft: '0.5em' },
+          }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: '16px', bgcolor: '#FAFCF8' } }}
+        />
+      </SurveyDialog>
 
-      {/* OTP Verification Dialog */}
-      <Dialog PaperProps={dialogPaperProps} open={otpDialogOpen} onClose={() => { }}>
-        <DialogTitle sx={{ fontWeight: 'bold' }}>
-          {language === 'si' ? 'OTP අංකය ඇතුළත් කරන්න' : 'Enter 6-Digit OTP'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" mb={2}>
-            {language === 'si'
-              ? 'කරුණාකර ඔබගේ ජංගම දුරකථනයට ලැබුණු අංක 6 කින් යුත් කේතය ඇතුළත් කරන්න.'
-              : 'Please enter the 6-digit code sent to your mobile.'}
-          </Typography>
-          <TextField
-            fullWidth
-            autoFocus
-            variant="outlined"
-            label="OTP Code"
-            value={otpCode}
-            onChange={(e) => setOtpCode(e.target.value)}
-            inputProps={{ maxLength: 6 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOtpDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleVerifyOtp} disabled={otpVerifying || otpCode.length !== 6}>
-            {otpVerifying ? <CircularProgress size={24} color="inherit" /> : 'Confirm'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* ── Submitted ── */}
+      <SurveyDialog
+        open={successDialogOpen}
+        tone="success"
+        icon={<CheckCircleRoundedIcon />}
+        title={L('Survey submitted', 'සමීක්ෂණය ඉදිරිපත් කරන ලදී', 'கணக்கெடுப்பு சமர்ப்பிக்கப்பட்டது')}
+        subtitle={L('Thank you. Keep your registration number for future reference.', 'ස්තූතියි. ඔබේ ලියාපදිංචි අංකය ඉදිරි අවශ්‍යතා සඳහා තබා ගන්න.', 'நன்றி. உங்கள் பதிவு எண்ணை எதிர்காலக் குறிப்புக்காக வைத்திருங்கள்.')}
+        actions={
+          <>
+            <DialogButton kind="secondary" onClick={() => { setSuccessDialogOpen(false); navigate(gnHomeUrl); }}>
+              {L('Back to area page', 'ප්‍රදේශ පිටුවට', 'பகுதிப் பக்கத்திற்கு')}
+            </DialogButton>
+            {submitSuccessData?.regNumber && (
+              <DialogButton endIcon={<ArrowForwardRoundedIcon />} onClick={() => { setSuccessDialogOpen(false); navigate(`/business/${encodeURIComponent(submitSuccessData.regNumber)}`); }}>
+                {L('View business page', 'ව්‍යාපාර පිටුව බලන්න', 'வணிகப் பக்கத்தைப் பார்')}
+              </DialogButton>
+            )}
+          </>
+        }
+      >
+        {submitSuccessData && (
+          <DetailList rows={[
+            { icon: <TagRoundedIcon />, label: L('Registration number', 'ලියාපදිංචි අංකය', 'பதிவு எண்'), value: submitSuccessData.regNumber || '—' },
+            { icon: <ScheduleRoundedIcon />, label: L('Started – finished', 'ආරම්භය – අවසානය', 'தொடக்கம் – முடிவு'), value: `${submitSuccessData.startTime} – ${submitSuccessData.endTime}` },
+          ]} />
+        )}
+      </SurveyDialog>
 
-      {/* GPS Error Popup */}
-      <Dialog PaperProps={dialogPaperProps} open={!!gpsErrorPopup} onClose={() => { }}>
-        <DialogTitle sx={{ fontWeight: 'bold', color: 'error.main' }}>
-          {language === 'si' ? 'දෝෂයකි' : language === 'ta' ? 'பிழை' : 'Error'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">
-            {gpsErrorPopup}
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 2 }} color="textSecondary">
-            {language === 'si' ? 'කරුණාකර ඔබගේ බ්‍රවුසරයේ ඉහළ ඇති ලොක් (Lock) අයිකනය ක්ලික් කර "Location" සඳහා අවසර ලබා දී නැවත උත්සාහ කරන්න.' : 'Please click the lock icon in the address bar, allow Location access, and try again.'}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button
-            variant="outlined"
-            onClick={() => {
-              setGpsErrorPopup(null);
-              setShowGpsPopup(false);
-            }}
+      {/* ── Already submitted before ── */}
+      <SurveyDialog
+        open={duplicatePromptOpen}
+        tone="info"
+        icon={<InfoRoundedIcon />}
+        title={L('You already have a submission', 'ඔබට දැනටමත් ඉදිරිපත් කිරීමක් ඇත', 'நீங்கள் ஏற்கனவே சமர்ப்பித்துள்ளீர்கள்')}
+        subtitle={L('Do you want to add another business?', 'ඔබට තවත් ව්‍යාපාරයක් එක් කිරීමට අවශ්‍යද?', 'மற்றொரு வணிகத்தைச் சேர்க்க விரும்புகிறீர்களா?')}
+        actions={
+          <>
+            <DialogButton kind="secondary" onClick={() => { setDuplicatePromptOpen(false); navigate(gnHomeUrl); }}>
+              {L('No, go back', 'නැත, ආපසු', 'இல்லை, திரும்பு')}
+            </DialogButton>
+            <DialogButton onClick={() => setDuplicatePromptOpen(false)}>
+              {L('Yes, add another', 'ඔව්, තවත් එකක්', 'ஆம், மற்றொன்று')}
+            </DialogButton>
+          </>
+        }
+      />
+
+      {/* ── Mobile not verified ── */}
+      <SurveyDialog
+        open={otpRequiredAlertOpen}
+        tone="warning"
+        icon={<SmsRoundedIcon />}
+        title={L('Verify your mobile number first', 'පළමුව ජංගම අංකය තහවුරු කරන්න', 'முதலில் கைபேசி எண்ணைச் சரிபார்க்கவும்')}
+        subtitle={L('We need a verified number before the survey can be submitted. It is on the first step.', 'සමීක්ෂණය ඉදිරිපත් කිරීමට පෙර තහවුරු කළ අංකයක් අවශ්‍යයි. එය පළමු පියවරේ ඇත.', 'சமர்ப்பிப்பதற்கு முன் சரிபார்க்கப்பட்ட எண் தேவை. அது முதல் படியில் உள்ளது.')}
+        actions={
+          <DialogButton
+            sx={{ width: { xs: '100%', sm: 'auto' } }}
+            endIcon={<ArrowForwardRoundedIcon />}
+            onClick={() => { setOtpRequiredAlertOpen(false); setSubmitDialogOpen(false); setCurrentStep(0); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           >
-            {language === 'si' ? 'අවලංගු කරන්න' : 'Cancel'}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={() => {
-              setGpsErrorPopup(null);
-            }}
-          >
-            {language === 'si' ? 'නැවත උත්සාහ කරන්න' : 'Try Again'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+            {L('Go to mobile number', 'ජංගම අංකයට යන්න', 'கைபேசி எண்ணுக்குச் செல்')}
+          </DialogButton>
+        }
+      />
 
-      {/* Generic Alert Popup */}
-      <Dialog PaperProps={dialogPaperProps} open={genericAlertPopup?.open || false} onClose={() => setGenericAlertPopup(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 'bold' }}>
-          {genericAlertPopup?.title}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">
-            {genericAlertPopup?.message}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button variant="contained" color="primary" onClick={() => setGenericAlertPopup(null)}>
-            {language === 'si' ? 'හරි' : 'OK'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* ── Generic message ── */}
+      <SurveyDialog
+        open={genericAlertPopup?.open || false}
+        onClose={() => setGenericAlertPopup(null)}
+        tone={genericAlertPopup?.tone || 'info'}
+        icon={genericAlertPopup?.tone === 'success' ? <CheckCircleRoundedIcon /> : genericAlertPopup?.tone === 'danger' ? <ErrorOutlineRoundedIcon /> : genericAlertPopup?.tone === 'warning' ? <WarningAmberRoundedIcon /> : <InfoRoundedIcon />}
+        title={genericAlertPopup?.title}
+        subtitle={genericAlertPopup?.message}
+        actions={
+          <DialogButton sx={{ width: { xs: '100%', sm: 'auto' } }} onClick={() => setGenericAlertPopup(null)}>
+            {L('OK', 'හරි', 'சரி')}
+          </DialogButton>
+        }
+      />
+      </Box>
 
-      <GnPageFooter />
+      <LandingFooter
+        lang={lang}
+        copy={siteCopy}
+        showCta={false}
+        onStart={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onFind={() => navigate(`${gnHomeUrl}#types`)}
+        onSection={(id) => navigate(`${gnHomeUrl}#section-${id}`)}
+      />
     </Box>
   );
 };

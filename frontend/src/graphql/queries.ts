@@ -1126,8 +1126,8 @@ export const GET_APPROVED_SUBMISSIONS = gql`
 `;
 
 export const GET_CATEGORIES_BY_ROOT_SLUG = gql`
-  query GetCategoriesByRootSlug($rootSlug: String!) {
-    categoriesByRootSlug(rootSlug: $rootSlug) {
+  query GetCategoriesByRootSlug($rootSlug: String!, $slugPrefix: String) {
+    categoriesByRootSlug(rootSlug: $rootSlug, slugPrefix: $slugPrefix) {
       id
       slug
       nameEn
@@ -1192,6 +1192,22 @@ export const GET_P_DISTRICT_GN_OPTIONS = gql`
         dsSi
         dsTa
         divisionalSecretariatCode
+      }
+    }
+  }
+`;
+
+/** What the survey needs: names for the dialogs/payload and the boundary for the GPS check. */
+export const GET_GN_FOR_SURVEY = gql`
+  query GetGnForSurvey($CCODE: String!) {
+    gnByCcode(CCODE: $CCODE) {
+      ${GN_LABEL_FIELDS}
+      boundary {
+        minLat
+        maxLat
+        minLng
+        maxLng
+        polygons
       }
     }
   }

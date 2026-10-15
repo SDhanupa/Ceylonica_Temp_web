@@ -509,7 +509,7 @@ const CategoryDetailPage: React.FC = () => {
       >
         {/* Wordmark */}
         <Box onClick={() => navigate(gnPageUrl)} sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', flexShrink: 0 }}>
-          <Box component="img" src="/logo.png" alt="Ceylonica" sx={{ height: 28, width: 28, objectFit: 'contain' }} />
+          <Box component="img" src="/logo-192.webp" alt="Ceylonica" sx={{ height: 28, width: 28, objectFit: 'contain' }} />
           <Typography sx={{ display: { xs: 'none', sm: 'block' }, fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: '1.05rem', color: tc.text }}>
             Ceylonica
           </Typography>

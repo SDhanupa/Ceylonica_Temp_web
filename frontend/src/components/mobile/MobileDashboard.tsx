@@ -153,7 +153,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = (props) => {
         transition: 'background 0.3s ease, border-color 0.3s ease',
       }}>
         <Box onClick={goHome} sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
-          <Box component="img" src="/logo.png" alt="Ceylonica" sx={{ height: 34, width: 34, objectFit: 'contain' }} />
+          <Box component="img" src="/logo-192.webp" alt="Ceylonica" sx={{ height: 34, width: 34, objectFit: 'contain' }} />
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
             <Typography sx={{ fontFamily: "'Playfair Display', serif", fontWeight: 800, fontSize: '1.15rem', color: textMain, letterSpacing: '-0.01em', lineHeight: 1.1 }}>
               Ceylonica

@@ -17,7 +17,7 @@ type Query {
         @field(resolver: "App\\GraphQL\\Queries\\CategoryQueries@categoryBySlug")
 
     "Get all descendants of a root slug as a flat searchable list with breadcrumbs"
-    categoriesByRootSlug(rootSlug: String!): [FlatCategory!]!
+    categoriesByRootSlug(rootSlug: String!, slugPrefix: String): [FlatCategory!]!
         @field(resolver: "App\\GraphQL\\Queries\\CategoryQueries@categoriesByRootSlug")
 
     gnByCoordinates(lat: Float!, lng: Float!): GramaNiladhari @field(resolver: "App\\GraphQL\\Queries\\GnByCoordinates") @cache(maxAge: 3600)

@@ -118,7 +118,7 @@ const GnPageFooter: React.FC<GnPageFooterProps> = () => {
           {/* Branding */}
           <Grid item xs={12} md={4} sx={{ textAlign: { xs: 'center', md: 'left' }, pr: { md: 4 } }}>
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 3, mb: 2 }}>
-              <Box component="img" src="/logo.png" alt="Ceylonica Logo" sx={{ height: { xs: 48, md: 62 }, width: 'auto', objectFit: 'contain' }} />
+              <Box component="img" src="/logo-192.webp" alt="Ceylonica Logo" sx={{ height: { xs: 48, md: 62 }, width: 'auto', objectFit: 'contain' }} />
             </Box>
             <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: "'Playfair Display', serif", color: '#ffffff', mb: 2 }}>
               Ceylonica

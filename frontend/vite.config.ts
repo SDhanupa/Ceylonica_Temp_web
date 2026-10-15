@@ -12,6 +12,22 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        output: {
+          // Long-lived vendor chunks: app deploys don't invalidate cached libraries.
+          // Split by module path (not package entry) so tree-shaking still drops
+          // unused MUI components instead of pulling in the whole barrel file.
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (/[\/]node_modules[\/](@mui|@emotion)[\/]/.test(id)) return 'mui';
+            if (/[\/]node_modules[\/](@apollo|graphql)[\/]/.test(id)) return 'apollo';
+            if (/[\/]node_modules[\/](react|react-dom|react-router|react-router-dom|scheduler)[\/]/.test(id)) return 'react';
+            return undefined;
+          },
+        },
+      },
+    },
     server: {
       port: 5175, // public portal (main app uses 5173/5174)
       proxy: {

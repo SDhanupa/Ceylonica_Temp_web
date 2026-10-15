@@ -15,11 +15,22 @@ class OtpController extends Controller
     private const RESEND_COOLDOWN_SECONDS = 60;
     /** How long a successful verification remains usable to submit the survey. */
     private const VERIFICATION_TTL_MINUTES = 30;
+    /** Wrong guesses allowed per issued code before it is invalidated. */
+    private const MAX_VERIFY_ATTEMPTS = 5;
+    /** Digits with an optional leading +, 9 to 15 long (local or international). */
+    private const MOBILE_RULE = ['required', 'string', 'regex:/^\+?[0-9]{9,15}$/'];
+
+    /** Strip formatting people type into phone numbers ("077 123-4567"). */
+    public static function normalizeMobile(?string $mobile): string
+    {
+        return preg_replace('/[\s\-().]/', '', (string) $mobile);
+    }
 
     public function send(Request $request)
     {
+        $request->merge(['mobile' => self::normalizeMobile($request->input('mobile'))]);
         $request->validate([
-            'mobile' => 'required|string|max:15',
+            'mobile' => self::MOBILE_RULE,
         ]);
 
         $mobile = $request->mobile;
@@ -46,6 +57,7 @@ class OtpController extends Controller
         $otp = (string) random_int(100000, 999999);
 
         Cache::put('otp_' . $mobile, $otp, now()->addMinutes(self::OTP_TTL_MINUTES));
+        Cache::forget('otp_attempts_' . $mobile);
         Cache::put($cooldownKey, true, now()->addSeconds(self::RESEND_COOLDOWN_SECONDS));
 
         $message = "Your Ceylonica Industry Survey verification code is: {$otp}. Please do not share this code.";
@@ -88,9 +100,10 @@ class OtpController extends Controller
 
     public function verify(Request $request)
     {
+        $request->merge(['mobile' => self::normalizeMobile($request->input('mobile'))]);
         $request->validate([
-            'mobile' => 'required|string',
-            'code' => 'required|string|size:6',
+            'mobile' => self::MOBILE_RULE,
+            'code' => ['required', 'string', 'regex:/^[0-9]{6}$/'],
         ]);
 
         $mobile = $request->mobile;
@@ -105,8 +118,19 @@ class OtpController extends Controller
         // hash_equals() for a credential-like comparison, per PHP's own
         // recommendation — '===' on strings is not guaranteed constant-time.
         if (!hash_equals((string) $cachedCode, (string) $userCode)) {
+            // Per-number cap on guesses: the per-IP throttle alone lets a
+            // distributed attacker keep guessing one number's code.
+            $attemptsKey = 'otp_attempts_' . $mobile;
+            Cache::add($attemptsKey, 0, now()->addMinutes(self::OTP_TTL_MINUTES));
+            if (Cache::increment($attemptsKey) >= self::MAX_VERIFY_ATTEMPTS) {
+                Cache::forget('otp_' . $mobile);
+                Cache::forget($attemptsKey);
+                return response()->json(['success' => false, 'error' => 'Too many wrong codes. Please request a new code.'], 429);
+            }
             return response()->json(['success' => false, 'error' => 'Invalid OTP'], 400);
         }
+
+        Cache::forget('otp_attempts_' . $mobile);
 
         Cache::forget('otp_' . $mobile);
 

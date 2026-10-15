@@ -64,7 +64,7 @@ const SurveyProgress: React.FC<{
             justifyContent: 'center',
             background: `linear-gradient(135deg, ${T.brand} 0%, ${T.brandDark} 100%)`,
             color: '#fff',
-            boxShadow: '0 6px 16px rgba(37,99,235,0.30)',
+            boxShadow: '0 6px 16px rgba(21,128,61,0.30)',
             '& .MuiSvgIcon-root': { fontSize: { xs: '1.35rem', sm: '1.5rem' } },
             animation: 'sk-fade .4s ease both',
           }}
@@ -174,7 +174,7 @@ const SurveyProgress: React.FC<{
                     color: isCurrent ? '#fff' : done ? '#fff' : reachable ? T.muted : T.faint,
                     bgcolor: isCurrent ? T.brand : done ? T.accent : reachable ? '#fff' : '#f1f5f9',
                     border: `1.5px solid ${isCurrent ? T.brand : done ? T.accent : T.line}`,
-                    boxShadow: isCurrent ? '0 0 0 4px rgba(37,99,235,0.14)' : 'none',
+                    boxShadow: isCurrent ? '0 0 0 4px rgba(21,128,61,0.14)' : 'none',
                     '@media (hover: hover)': {
                       '&:hover': reachable && !isCurrent ? { borderColor: T.brand, color: T.brand } : {},
                     },

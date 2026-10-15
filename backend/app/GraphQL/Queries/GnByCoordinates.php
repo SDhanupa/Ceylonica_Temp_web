@@ -92,7 +92,9 @@ class GnByCoordinates
         // Fallback to Nominatim if local DB fails or returns nothing
         $options = [
             'http' => [
-                'header' => "User-Agent: CeylonicaApp/1.0\r\n"
+                'header' => "User-Agent: CeylonicaApp/1.0\r\n",
+                // Without a timeout a slow upstream holds a PHP worker for up to default_socket_timeout (60s).
+                'timeout' => 5,
             ]
         ];
         $context = stream_context_create($options);

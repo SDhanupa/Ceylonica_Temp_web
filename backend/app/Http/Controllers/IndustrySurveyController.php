@@ -19,6 +19,24 @@ class IndustrySurveyController extends Controller
     private const UNIQUE_VIOLATION = '23505';
 
     /**
+     * Server-managed key inside form_data holding the SHA-256 of the survey's
+     * edit token. The portal is anonymous, so possession of this token is what
+     * proves a caller created the row; it is never accepted from or returned
+     * to clients.
+     */
+    private const EDIT_TOKEN_KEY = '_edit_token_hash';
+
+    /** Hide the server-managed token hash from any survey sent to a client. */
+    private function forClient(IndustrySurvey $survey): array
+    {
+        $data = $survey->toArray();
+        if (is_array($data['form_data'] ?? null)) {
+            unset($data['form_data'][self::EDIT_TOKEN_KEY]);
+        }
+        return $data;
+    }
+
+    /**
      * Resolve the caller's identity as set by KeycloakAuthGuard.
      *
      * `$request->user()` is always null in this app (the guard never calls
@@ -52,6 +70,11 @@ class IndustrySurveyController extends Controller
             // it here would let any authenticated caller self-approve.
             'status'      => 'nullable|string|in:draft,submitted',
             'form_data'   => 'nullable|array',
+            'form_data.formValues'   => 'nullable|array|max:500',
+            'form_data.formValues.*' => 'nullable|string|max:5000',
+            'form_data.currentStep'  => 'nullable|integer|min:0|max:100',
+            // Proof of ownership for updates, issued when the row was created.
+            'edit_token'  => 'nullable|string|max:128',
             // Single-use proof from OtpController::verify(), required only when
             // actually submitting (drafts can be saved before verification).
             'mobile_verification_token' => 'nullable|string',
@@ -71,6 +94,8 @@ class IndustrySurveyController extends Controller
 
         $status = $request->input('status', 'draft');
         $formData = $request->input('form_data') ?? [];
+        // Never let a client set (or overwrite) the ownership hash.
+        unset($formData[self::EDIT_TOKEN_KEY]);
         // Both write paths nest survey answers under `formValues` (see the
         // frontend's handleSaveDraft/handleSubmit) — this is the one shape new
         // rows are written in; the dual-path reads elsewhere stay only for
@@ -78,7 +103,7 @@ class IndustrySurveyController extends Controller
         $formValues = $formData['formValues'] ?? [];
 
         if ($status === 'submitted') {
-            $mobile = $formValues['b_mobile'] ?? null;
+            $mobile = isset($formValues['b_mobile']) ? OtpController::normalizeMobile($formValues['b_mobile']) : null;
             $proof = $request->input('mobile_verification_token');
             if (!$mobile || !$proof || !hash_equals((string) Cache::get('otp_verified_' . $mobile, ''), (string) $proof)) {
                 return response()->json([
@@ -89,14 +114,16 @@ class IndustrySurveyController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $userId, $status, $formData, $formValues) {
-                // Determine target owner based on NIC if provided.
+                // Determine target owner based on NIC if provided. Only on an
+                // OTP-verified submission: drafts are anonymous and unverified,
+                // so they must not create or resolve accounts from typed-in NICs.
                 $targetUserId = $userId;
                 $bNic = $formValues['b_nic'] ?? null;
                 $bName = $formValues['b_name'] ?? null;
                 $bMobile = $formValues['b_mobile'] ?? null;
                 $bAddress = $formValues['b_address'] ?? null;
 
-                if ($bNic && $bName && $bMobile) {
+                if ($status === 'submitted' && $bNic && $bName && $bMobile) {
                     $createdOrFoundId = $this->getOrCreateKeycloakUserForSurvey($bNic, $bName, $bMobile, $bAddress);
                     if ($createdOrFoundId) {
                         $targetUserId = $createdOrFoundId;
@@ -127,22 +154,20 @@ class IndustrySurveyController extends Controller
                     return response()->json(['error' => 'The referenced survey no longer exists'], 404);
                 }
 
-                if ($survey) {
-                    // Check if logged in user is admin
-                    $token = $request->bearerToken();
-                    $isAdmin = false;
-                    if ($token) {
-                        $parts = explode('.', $token);
-                        if (count($parts) === 3) {
-                            $payload = json_decode(base64_decode($parts[1]), true);
-                            $roles = $payload['realm_access']['roles'] ?? [];
-                            $isAdmin = in_array('super_admin', $roles) || in_array('admin', $roles) || in_array('moderator', $roles);
-                        }
-                    }
+                $newEditToken = null;
 
-                    if (!$isAdmin && $survey->user_id !== $userId && $survey->user_id !== $targetUserId && $survey->created_by !== $userId) {
+                if ($survey) {
+                    // Only the creator (holder of the edit token) may update a
+                    // row. The previous check trusted an unsigned JWT's roles
+                    // and NIC-derived ownership, both of which any caller could
+                    // supply, and let anonymous callers overwrite each other's
+                    // anonymous rows (null === null).
+                    $storedHash = is_array($survey->form_data) ? ($survey->form_data[self::EDIT_TOKEN_KEY] ?? null) : null;
+                    $givenToken = $request->input('edit_token');
+                    if (!is_string($storedHash) || !is_string($givenToken) || !hash_equals($storedHash, hash('sha256', $givenToken))) {
                         return response()->json(['error' => 'You do not have permission to modify this survey'], 403);
                     }
+                    $data['form_data'][self::EDIT_TOKEN_KEY] = $storedHash;
                     if ($survey->status === 'approved') {
                         return response()->json(['error' => 'This survey has already been approved and can no longer be modified'], 409);
                     }
@@ -150,6 +175,8 @@ class IndustrySurveyController extends Controller
                     $data['user_id'] = $survey->user_id;
                     $survey->update($data);
                 } else {
+                    $newEditToken = Str::random(48);
+                    $data['form_data'][self::EDIT_TOKEN_KEY] = hash('sha256', $newEditToken);
                     $data['created_by'] = $userId;
                     $survey = IndustrySurvey::create($data);
                 }
@@ -160,7 +187,7 @@ class IndustrySurveyController extends Controller
                     // verification can't be replayed against a second, later
                     // submission with a different (or since-changed) phone.
                     if ($mobile = ($formData['formValues']['b_mobile'] ?? null)) {
-                        Cache::forget('otp_verified_' . $mobile);
+                        Cache::forget('otp_verified_' . OtpController::normalizeMobile($mobile));
                     }
 
                     // Send SMS with profile + QR links
@@ -172,10 +199,14 @@ class IndustrySurveyController extends Controller
                     );
                 }
 
-                return response()->json([
+                $body = [
                     'message' => 'Survey saved successfully',
-                    'survey'  => $survey->fresh(),
-                ], 200);
+                    'survey'  => $this->forClient($survey->fresh()),
+                ];
+                if ($newEditToken) {
+                    $body['edit_token'] = $newEditToken;
+                }
+                return response()->json($body, 200);
             });
         } catch (\Throwable $e) {
             Log::error('Error submitting industry survey: ' . $e->getMessage(), ['user_id' => $userId]);
@@ -210,7 +241,12 @@ class IndustrySurveyController extends Controller
             mkdir($directory, 0755, true);
         }
 
-        $filename = (string) Str::uuid() . '.' . strtolower($photo->getClientOriginalExtension());
+        // Extension comes from the detected content type, never the client's filename (e.g. "x.php").
+        $extension = $photo->guessExtension();
+        if (!in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+            return response()->json(['error' => 'Please choose a JPG, PNG, GIF or WebP image.'], 422);
+        }
+        $filename = (string) Str::uuid() . '.' . $extension;
         $photo->move($directory, $filename);
         $path = 'industry-survey/' . $filename;
 
@@ -292,6 +328,14 @@ class IndustrySurveyController extends Controller
      */
     public function generateRegNumber(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'ccode'         => ['required', 'string', 'max:20', 'regex:/^[A-Za-z0-9]+$/'],
+            'category_slug' => ['required', 'string', 'max:100', 'regex:/^[A-Za-z0-9.\-]+$/'],
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['error' => 'ccode and category_slug are required'], 422);
+        }
+
         $ccode        = strtoupper(trim($request->input('ccode', '')));
         $categorySlug = trim($request->input('category_slug', ''));
 
@@ -618,7 +662,16 @@ class IndustrySurveyController extends Controller
             // Prefer the public origin of the browser that submitted this
             // questionnaire. If it is unavailable, use the actual request
             // host rather than a hard-coded domain.
-            $frontendUrl = rtrim($submittedPublicBaseUrl ?: $request->getSchemeAndHttpHost(), '/');
+            // Only origins this deployment actually serves may appear in the SMS,
+            // so a crafted request can't make our sender ID text out a foreign link.
+            $allowedOrigins = array_filter(array_map(
+                fn ($u) => is_string($u) && $u !== '' ? rtrim($u, '/') : null,
+                array_merge(config('cors.allowed_origins', []), [config('app.url'), $request->getSchemeAndHttpHost()]),
+            ));
+            $submitted = $submittedPublicBaseUrl ? rtrim($submittedPublicBaseUrl, '/') : null;
+            $frontendUrl = ($submitted && in_array($submitted, $allowedOrigins, true))
+                ? $submitted
+                : rtrim($request->getSchemeAndHttpHost(), '/');
             $profileLink = $frontendUrl . '/business/' . urlencode($regNumber);
             $bName = $fv['b_name'] ?? 'Business';
 

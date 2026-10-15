@@ -60,8 +60,11 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ isDarkMode = false, a
   const theme = useTheme();
   const { isAuthenticated, login, userInfo } = useAuth();
 
-  // Fetch all subcategories globally to search through them
-  useEffect(() => {
+  // The full category list is large; load it only once someone starts searching.
+  const categoriesRequested = useRef(false);
+  const ensureCategories = () => {
+    if (categoriesRequested.current) return;
+    categoriesRequested.current = true;
     fetch(`/api/all-categories`)
       .then(res => res.json())
       .then(data => {
@@ -69,10 +72,11 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ isDarkMode = false, a
           setSubCatTables(data.tables);
         }
       })
-      .catch(console.error);
-  }, []);
+      .catch((err) => { categoriesRequested.current = false; console.error(err); });
+  };
 
   useEffect(() => {
+    if (query.trim()) ensureCategories();
     if (query.trim().length < 2) {
       setResults([]);
       setOpen(false);
@@ -84,7 +88,8 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ isDarkMode = false, a
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [query]);
+    // subCatTables: re-run once the lazily loaded categories arrive.
+  }, [query, subCatTables]);
 
   const performSearch = async (searchQuery: string) => {
     setLoading(true);
@@ -245,7 +250,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ isDarkMode = false, a
             placeholder="Search GNs, Categories, Subcategories..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => { if (query.trim().length >= 2) setOpen(true); }}
+            onFocus={() => { ensureCategories(); if (query.trim().length >= 2) setOpen(true); }}
             sx={{
               flex: 1,
               color: isDarkMode ? '#ffffff' : '#0f172a',

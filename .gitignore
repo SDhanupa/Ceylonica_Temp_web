@@ -81,5 +81,12 @@ Homestead.json
 Homestead.yaml
 /auth.json
 
+# Database backups & dumps
+*.dump
+*.sql
+
+# Tooling & agent metadata
+.claude/
+
 # Docker overrides
 docker-compose.override.yml

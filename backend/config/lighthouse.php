@@ -227,8 +227,11 @@ return [
 
     'security' => [
         'max_query_complexity' => GraphQL\Validator\Rules\QueryComplexity::DISABLED,
-        'max_query_depth' => GraphQL\Validator\Rules\QueryDepth::DISABLED,
-        'disable_introspection' => (bool) env('LIGHTHOUSE_SECURITY_DISABLE_INTROSPECTION', false)
+        // The app's deepest query nests 6 levels; 12 leaves headroom while
+        // rejecting pathologically nested queries.
+        'max_query_depth' => (int) env('LIGHTHOUSE_SECURITY_MAX_QUERY_DEPTH', 12),
+        // Off in production unless explicitly enabled; on for local development.
+        'disable_introspection' => (bool) env('LIGHTHOUSE_SECURITY_DISABLE_INTROSPECTION', env('APP_ENV') === 'production')
             ? GraphQL\Validator\Rules\DisableIntrospection::ENABLED
             : GraphQL\Validator\Rules\DisableIntrospection::DISABLED,
     ],
