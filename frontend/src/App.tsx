@@ -56,6 +56,10 @@ const App: React.FC = () => {
                 element={<IndustrySurveyPage />}
               />
               <Route
+                path="/business"
+                element={<PublicBusinessProfilePage />}
+              />
+              <Route
                 path="/business/:regNumber"
                 element={<PublicBusinessProfilePage />}
               />
