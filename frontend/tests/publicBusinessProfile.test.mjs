@@ -8,7 +8,7 @@ const { publicProfileDetails, publicPhotoUrls } = await import(`data:text/javasc
 
 test('private fields and internal metadata never become profile detail rows', () => {
   assert.deepEqual(publicProfileDetails({ b_nic: 'private', b_mobile: 'private', q_email: 'private',
-    q_address: 'private', q_whatsapp: 'private', q_dob_age: 'private', _edit_token_hash: 'private',
+    q_address: 'private', q_whatsapp: 'private', q_dob: 'private', q_dob_age: 'private', _edit_token_hash: 'private',
     b_photo: 'industry-survey/a.jpg', b_type: '1', b_reg_no: 'abc', b_name: 'Farm' }), [['b_name', 'Farm']]);
 });
 test('details preserve public answers, order key facts first and avoid duplicate owner', () => {

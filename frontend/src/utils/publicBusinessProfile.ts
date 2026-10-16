@@ -1,6 +1,6 @@
 // Keep presentation defensive even when a legacy response contains metadata.
 export const PRIVATE_PROFILE_FIELDS = new Set([
-  'b_nic', 'q_nic', 'q_dob_age', 'q_email', 'q_address', 'q_whatsapp',
+  'b_nic', 'q_nic', 'q_dob', 'q_dob_age', 'q_email', 'q_address', 'q_whatsapp',
   'q_mobile', 'b_mobile', 'b_photo', 'b_reg_no', 'b_type',
 ]);
 

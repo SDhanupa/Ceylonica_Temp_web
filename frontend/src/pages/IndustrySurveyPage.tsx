@@ -961,6 +961,7 @@ const IndustrySurveyPage: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, mb: message ? 0.5 : 1 }}>
           <Typography
             component="label"
+            id={fieldKey ? `${fieldKey}-label` : undefined}
             sx={{ fontSize: { xs: '0.9rem', sm: '0.95rem' }, fontWeight: 700, color: T.ink, lineHeight: 1.4 }}
           >
             {text}
@@ -1397,6 +1398,7 @@ const IndustrySurveyPage: React.FC = () => {
             >
               <SurveyProgress
                 sections={SECTIONS}
+                sectionLabel={L('Section', 'කොටස', 'பகுதி')}
                 current={Math.max(0, activeStepIndexes.indexOf(currentStep))}
                 maxReached={Math.max(0, activeStepIndexes.reduce(
                   (lastReached, stepIndex, sectionIndex) => stepIndex <= maxReached ? sectionIndex : lastReached,
@@ -1413,6 +1415,8 @@ const IndustrySurveyPage: React.FC = () => {
                   component="form"
                   onSubmit={(e: React.FormEvent) => { e.preventDefault(); handleAttemptSubmit(); }}
                   sx={{
+                    // Every input and select in the form gets a 48px touch target on phones (44px on larger screens).
+                    '& .MuiOutlinedInput-root:not(.MuiInputBase-multiline)': { minHeight: { xs: 48, sm: 44 } },
                     px: { xs: 1.75, sm: 3.5 },
                     py: { xs: 2.25, sm: 3.5 },
                     display: 'flex',
@@ -1478,19 +1482,19 @@ const IndustrySurveyPage: React.FC = () => {
 
                   <Box>
                     <QuestionLabel fieldKey="b_name" text={getDynamicLabel('b_name', 'Business Location Name', 'ව්‍යාපාර ස්ථානයේ නම', 'வணிகத்தின் பெயர்')} />
-                    <TextField fullWidth variant="outlined" size="small" value={formValues['b_name'] || ''} onChange={(e) => handleInputChange('b_name', e.target.value)} />
+                    <TextField inputProps={{ 'aria-labelledby': 'b_name-label' }} fullWidth variant="outlined" size="small" value={formValues['b_name'] || ''} onChange={(e) => handleInputChange('b_name', e.target.value)} />
                   </Box>
 
 
 
                   <Box>
                     <QuestionLabel fieldKey="b_address" text={getDynamicLabel('b_address', 'Address', 'ලිපිනය', 'முகவரி')} />
-                    <TextField fullWidth variant="outlined" size="small" value={formValues['b_address'] || ''} onChange={(e) => handleInputChange('b_address', e.target.value)} />
+                    <TextField inputProps={{ 'aria-labelledby': 'b_address-label' }} fullWidth variant="outlined" size="small" value={formValues['b_address'] || ''} onChange={(e) => handleInputChange('b_address', e.target.value)} />
                   </Box>
 
                   <Box>
                     <QuestionLabel fieldKey="b_owner_name" text={getDynamicLabel('b_owner_name', 'Business Owner Name', 'ව්‍යාපාර හිමියාගේ නම', 'உரிமையாளரின் பெயர்')} />
-                    <TextField fullWidth variant="outlined" size="small" value={formValues['b_owner_name'] || ''} onChange={(e) => handleInputChange('b_owner_name', e.target.value)} />
+                    <TextField inputProps={{ 'aria-labelledby': 'b_owner_name-label' }} fullWidth variant="outlined" size="small" value={formValues['b_owner_name'] || ''} onChange={(e) => handleInputChange('b_owner_name', e.target.value)} />
                   </Box>
 
                   <Box>
@@ -1503,7 +1507,7 @@ const IndustrySurveyPage: React.FC = () => {
                         variant="outlined"
                         size="small"
                         type="tel"
-                        inputProps={{ inputMode: 'tel', autoComplete: 'tel' }}
+                        inputProps={{ 'aria-labelledby': 'b_mobile-label', inputMode: 'tel', autoComplete: 'tel' }}
                         value={formValues['b_mobile'] || ''}
                         disabled={isMobileVerified}
                         onChange={(e) => {
@@ -1606,7 +1610,7 @@ const IndustrySurveyPage: React.FC = () => {
                       fullWidth
                       variant="outlined"
                       size="small"
-                      inputProps={{ inputMode: 'text', autoCapitalize: 'characters', autoComplete: 'off' }}
+                      inputProps={{ 'aria-labelledby': 'b_nic-label', inputMode: 'text', autoCapitalize: 'characters', autoComplete: 'off' }}
                       value={formValues['b_nic'] || ''}
                       onChange={(e) => handleInputChange('b_nic', e.target.value)}
                     />
@@ -1644,7 +1648,7 @@ const IndustrySurveyPage: React.FC = () => {
 
                   <Box>
                     <QuestionLabel fieldKey="q_owner_name" text={getDynamicLabel('q_owner_name', "Owner's Full Name", "හිමිකරුගේ සම්පූර්ණ නම", "உரிமையாளரின் முழுப் பெயர்")} />
-                    <TextField fullWidth variant="outlined" size="small" value={formValues['q_owner_name'] || ''} onChange={(e) => handleInputChange('q_owner_name', e.target.value)} />
+                    <TextField inputProps={{ 'aria-labelledby': 'q_owner_name-label' }} fullWidth variant="outlined" size="small" value={formValues['q_owner_name'] || ''} onChange={(e) => handleInputChange('q_owner_name', e.target.value)} />
                   </Box>
 
                   <Box>
@@ -1660,7 +1664,7 @@ const IndustrySurveyPage: React.FC = () => {
 
                   <Box>
                     <QuestionLabel fieldKey="q_nic" text={getDynamicLabel('q_nic', 'National Identity Card Number (NIC)', 'ජාතික හැඳුනුම්පත් අංකය', 'தேசிய அடையாள அட்டை எண் (NIC)')} />
-                    <TextField fullWidth variant="outlined" size="small" value={formValues['q_nic'] || ''}
+                    <TextField inputProps={{ 'aria-labelledby': 'q_nic-label' }} fullWidth variant="outlined" size="small" value={formValues['q_nic'] || ''}
                       onChange={(e) => {
                         const val = e.target.value;
                         setFormValues(prev => applyNicToDob({ ...prev, q_nic: val }, prev['q_nic'], val));
@@ -1683,7 +1687,7 @@ const IndustrySurveyPage: React.FC = () => {
                               size="small"
                               value={dob}
                               onChange={(e) => setDob(e.target.value)}
-                              inputProps={{
+                              inputProps={{ 'aria-labelledby': 'q_dob_age-label',
                                 min: MIN_DOB,
                                 max: todayIso(),
                                 'aria-label': L('Date of birth', 'උපන් දිනය', 'பிறந்த தேதி'),
@@ -1717,22 +1721,22 @@ const IndustrySurveyPage: React.FC = () => {
 
                   <Box>
                     <QuestionLabel fieldKey="q_whatsapp" text={getDynamicLabel('q_whatsapp', 'WhatsApp Number', 'වට්ස්ඇප් දුරකථන අංකය', 'வாட்ஸ்அப் எண்')} />
-                    <TextField fullWidth variant="outlined" size="small" type="tel" inputProps={{ inputMode: 'tel', autoComplete: 'tel' }} value={formValues['q_whatsapp'] || ''} onChange={(e) => handleInputChange('q_whatsapp', e.target.value)} />
+                    <TextField fullWidth variant="outlined" size="small" type="tel" inputProps={{ 'aria-labelledby': 'q_whatsapp-label', inputMode: 'tel', autoComplete: 'tel' }} value={formValues['q_whatsapp'] || ''} onChange={(e) => handleInputChange('q_whatsapp', e.target.value)} />
                   </Box>
 
                   <Box>
                     <QuestionLabel fieldKey="q_mobile" text={getDynamicLabel('q_mobile', 'Main Phone Number', 'ප්‍රධාන දුරකථන අංකය', 'முக்கிய தொலைபேசி எண்')} />
-                    <TextField fullWidth variant="outlined" size="small" type="tel" inputProps={{ inputMode: 'tel', autoComplete: 'tel' }} value={formValues['q_mobile'] || ''} onChange={(e) => handleInputChange('q_mobile', e.target.value)} />
+                    <TextField fullWidth variant="outlined" size="small" type="tel" inputProps={{ 'aria-labelledby': 'q_mobile-label', inputMode: 'tel', autoComplete: 'tel' }} value={formValues['q_mobile'] || ''} onChange={(e) => handleInputChange('q_mobile', e.target.value)} />
                   </Box>
 
                   <Box>
                     <QuestionLabel fieldKey="q_email" text={getDynamicLabel('q_email', 'Email Address (if any)', 'විද්‍යුත් තැපැල් ලිපිනය (ඇත්නම්)', 'மின்னஞ்சல் முகவரி (ஏதேனும் இருந்தால்)')} />
-                    <TextField fullWidth variant="outlined" size="small" type="email" inputProps={{ inputMode: 'email', autoComplete: 'email' }} value={formValues['q_email'] || ''} onChange={(e) => handleInputChange('q_email', e.target.value)} />
+                    <TextField fullWidth variant="outlined" size="small" type="email" inputProps={{ 'aria-labelledby': 'q_email-label', inputMode: 'email', autoComplete: 'email' }} value={formValues['q_email'] || ''} onChange={(e) => handleInputChange('q_email', e.target.value)} />
                   </Box>
 
                   <Box>
                     <QuestionLabel fieldKey="q_address" text={getDynamicLabel('q_address', 'Residential Address', 'නේවාසික ලිපිනය', 'குடியிருப்பு முகவரி')} />
-                    <TextField fullWidth variant="outlined" size="small" multiline rows={2} value={formValues['q_address'] || ''} onChange={(e) => handleInputChange('q_address', e.target.value)} />
+                    <TextField inputProps={{ 'aria-labelledby': 'q_address-label' }} fullWidth variant="outlined" size="small" multiline rows={2} value={formValues['q_address'] || ''} onChange={(e) => handleInputChange('q_address', e.target.value)} />
                   </Box>
 
                   <Box>
@@ -1752,12 +1756,12 @@ const IndustrySurveyPage: React.FC = () => {
 
                   <Box>
                     <QuestionLabel fieldKey="q_experience" text={getDynamicLabel('q_experience', 'Experience in this Industry (Years)', 'මෙම කර්මාන්තයේ පළපුරුද්ද (වසර)', 'இந்தத் துறையில் அனுபவம் (ஆண்டுகள்)')} />
-                    <TextField fullWidth variant="outlined" size="small" type="number" inputProps={{ inputMode: 'numeric', min: 0 }} value={formValues['q_experience'] || ''} onChange={(e) => handleInputChange('q_experience', e.target.value)} />
+                    <TextField fullWidth variant="outlined" size="small" type="number" inputProps={{ 'aria-labelledby': 'q_experience-label', inputMode: 'numeric', min: 0 }} value={formValues['q_experience'] || ''} onChange={(e) => handleInputChange('q_experience', e.target.value)} />
                   </Box>
 
                   <Box>
                     <QuestionLabel fieldKey="q_prev_occupation" text={getDynamicLabel('q_prev_occupation', 'Occupation before starting the industry', 'කර්මාන්තය ආරම්භ කිරීමට පෙර රැකියාව', 'தொழில் தொடங்கும் முன் வேலைவாய்ப்பு')} />
-                    <TextField fullWidth variant="outlined" size="small" value={formValues['q_prev_occupation'] || ''} onChange={(e) => handleInputChange('q_prev_occupation', e.target.value)} />
+                    <TextField inputProps={{ 'aria-labelledby': 'q_prev_occupation-label' }} fullWidth variant="outlined" size="small" value={formValues['q_prev_occupation'] || ''} onChange={(e) => handleInputChange('q_prev_occupation', e.target.value)} />
                   </Box>
 
                   {StepNav({ prev: previousActiveStep(1), next: nextActiveStep(1) })}

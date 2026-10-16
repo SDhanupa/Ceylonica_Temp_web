@@ -23,7 +23,7 @@ export const T = {
   brandDark: '#14532D',
   brandSoft: '#ECF7E6',
   brandSofter: 'rgba(21,128,61,0.06)',
-  accent: '#059669',
+  accent: '#047857', // 5.5:1 on white (was #059669, 3.8:1)
   accentSoft: '#ecfdf5',
   ink: '#0f172a',
   body: '#334155',

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import {
   Box, Typography, IconButton, Menu, MenuItem, Divider,
   useTheme, useMediaQuery, CircularProgress, Paper,
@@ -796,7 +797,7 @@ const CategoryDetailPage: React.FC = () => {
                   </Box>
                   {s.status === 'approved' && (
                     <Typography sx={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600, mt: 0.75 }}>
-                      ✓ Verified
+                      <CheckRoundedIcon aria-hidden sx={{ fontSize: '1em', verticalAlign: '-0.15em', mr: 0.25 }} />Verified
                     </Typography>
                   )}
                 </Box>

@@ -157,14 +157,17 @@ const FruitLandingPage: React.FC = () => {
         action={
           <Button
             onClick={() => openStart(null)}
+            aria-label={copy.navSurvey}
             sx={{
-              minHeight: 44, px: { xs: 1.75, sm: 2.25 }, borderRadius: '999px', textTransform: 'none', fontWeight: 800,
+              // Icon-only on phones: logos + language switch + a long Sinhala/Tamil label don't fit in 390px.
+              minHeight: 44, minWidth: 44, px: { xs: 0, sm: 2.25 }, borderRadius: '999px', textTransform: 'none', fontWeight: 800,
               fontSize: '0.95rem', color: C.onDark, bgcolor: C.field, boxShadow: 'none', whiteSpace: 'nowrap',
               '&:hover': { bgcolor: C.fieldHover, boxShadow: 'none', transform: 'none' },
               ...focusRing,
             }}
           >
-            {copy.navSurvey}
+            <EditNoteRoundedIcon sx={{ display: { xs: 'block', sm: 'none' }, fontSize: '1.4rem' }} />
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{copy.navSurvey}</Box>
           </Button>
         }
       />
@@ -260,6 +263,8 @@ const FruitLandingPage: React.FC = () => {
                   sx={{
                     listStyle: 'none', p: 0, m: 0, display: 'grid', gap: { xs: 1.25, sm: 1.5 },
                     gridTemplateColumns: { xs: 'repeat(3, minmax(0, 1fr))', sm: 'repeat(4, minmax(0, 1fr))', md: 'repeat(6, minmax(0, 1fr))', lg: 'repeat(7, minmax(0, 1fr))' },
+                    // Narrow phones: two per row so long Sinhala/Tamil words fit without breaking mid-word.
+                    '@media (max-width: 419.95px)': { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
                   }}
                 >
                   {FRUIT_PICKS.map((t, i) => (

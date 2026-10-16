@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import { useLanguage } from '../context/LanguageContext';
 import { Box, Typography, Button, FormControl, CircularProgress, Alert, Dialog, DialogContent, DialogActions, Autocomplete, TextField, Divider, useTheme } from '@mui/material';
 import { useQuery } from '@apollo/client';
@@ -326,7 +327,7 @@ const LocationSelectorModal: React.FC<LocationSelectorModalProps> = ({ open, onC
                 fontWeight: 600,
                 '&:hover': { bgcolor: 'rgba(0,168,255,0.08)', borderColor: themeColors.primary }
               }}
-              startIcon={<span style={{ fontSize: '1.1em' }}>📍</span>}
+              startIcon={<PlaceOutlinedIcon />}
             >
               Use GPS Auto-Location
             </Button>

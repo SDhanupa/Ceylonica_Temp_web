@@ -41,7 +41,7 @@ export const LanguageSwitch: React.FC<{ value: Lang; onChange: (l: Lang) => void
           onClick={() => onChange(l.id)}
           sx={{
             minWidth: 44,
-            height: 36,
+            height: 44,
             px: 1.2,
             borderRadius: '999px',
             fontWeight: 700,
@@ -188,6 +188,7 @@ export const FruitTile: React.FC<{
       aria-label={`${name}, ${codeLabel} ${type.code}`}
       sx={{
         width: '100%',
+        height: '100%', // fill the grid row so tiles in a row stay the same height
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -219,11 +220,8 @@ export const FruitTile: React.FC<{
           fontSize: { xs: '0.9rem', sm: '0.95rem' },
           lineHeight: 1.35,
           color: C.ink,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          wordBreak: 'break-word',
+          // Full name, never clamped: several types differ only in their last words.
+          overflowWrap: 'break-word',
         }}
       >
         {name}
