@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use App\Services\SurveyDraftAccess;
 
 class IndustrySurveyController extends Controller
 {
@@ -24,7 +25,27 @@ class IndustrySurveyController extends Controller
      * proves a caller created the row; it is never accepted from or returned
      * to clients.
      */
-    private const EDIT_TOKEN_KEY = '_edit_token_hash';
+    private const EDIT_TOKEN_KEY = SurveyDraftAccess::TOKEN_KEY;
+
+    /** Read a draft only with its private edit/recovery code. No GET/query-string secrets. */
+    public function recoverDraft(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|integer|min:1',
+            'edit_token' => 'required|string|min:48|max:128',
+        ]);
+        $survey = IndustrySurvey::find($request->input('id'));
+        if (!$survey || !SurveyDraftAccess::allows($survey, $request->input('edit_token'))) {
+            return response()->json(['error' => 'Invalid draft ID or recovery code.'], 403)
+                ->header('Cache-Control', 'no-store');
+        }
+        if ($survey->status !== 'draft') {
+            return response()->json(['error' => 'Only unfinished drafts can be recovered.'], 409)
+                ->header('Cache-Control', 'no-store');
+        }
+        return response()->json(['survey' => $this->forClient($survey)])
+            ->header('Cache-Control', 'no-store');
+    }
 
     /** Hide the server-managed token hash from any survey sent to a client. */
     private function forClient(IndustrySurvey $survey): array
@@ -123,13 +144,6 @@ class IndustrySurveyController extends Controller
                 $bMobile = $formValues['b_mobile'] ?? null;
                 $bAddress = $formValues['b_address'] ?? null;
 
-                if ($status === 'submitted' && $bNic && $bName && $bMobile) {
-                    $createdOrFoundId = $this->getOrCreateKeycloakUserForSurvey($bNic, $bName, $bMobile, $bAddress);
-                    if ($createdOrFoundId) {
-                        $targetUserId = $createdOrFoundId;
-                    }
-                }
-
                 $data = [
                     'user_id'     => $targetUserId,
                     'ccode'       => $request->input('ccode'),
@@ -143,7 +157,7 @@ class IndustrySurveyController extends Controller
                 ];
 
                 $id = $request->input('id');
-                $survey = $id ? IndustrySurvey::find($id) : null;
+                $survey = $id ? IndustrySurvey::whereKey($id)->lockForUpdate()->first() : null;
 
                 if ($id && !$survey) {
                     // Client believes it has an existing draft that no longer
@@ -164,17 +178,28 @@ class IndustrySurveyController extends Controller
                     // anonymous rows (null === null).
                     $storedHash = is_array($survey->form_data) ? ($survey->form_data[self::EDIT_TOKEN_KEY] ?? null) : null;
                     $givenToken = $request->input('edit_token');
-                    if (!is_string($storedHash) || !is_string($givenToken) || !hash_equals($storedHash, hash('sha256', $givenToken))) {
+                    if (!SurveyDraftAccess::allows($survey, $givenToken)) {
                         return response()->json(['error' => 'You do not have permission to modify this survey'], 403);
                     }
-                    $data['form_data'][self::EDIT_TOKEN_KEY] = $storedHash;
                     if ($survey->status === 'approved') {
                         return response()->json(['error' => 'This survey has already been approved and can no longer be modified'], 409);
                     }
                     // Keep original user_id if we are just updating
                     $data['user_id'] = $survey->user_id;
+                    // Keep legacy metadata/answers the current UI does not know about.
+                    // Explicitly supplied values (including empty strings) still win.
+                    $oldData = is_array($survey->form_data) ? $survey->form_data : [];
+                    $data['form_data'] = array_replace($oldData, $formData);
+                    if (isset($formData['formValues']) && is_array($oldData['formValues'] ?? null)) {
+                        $data['form_data']['formValues'] = array_replace($oldData['formValues'], $formData['formValues']);
+                    }
+                    $data['form_data'][self::EDIT_TOKEN_KEY] = $storedHash;
                     $survey->update($data);
                 } else {
+                    if ($status === 'submitted' && $bNic && $bName && $bMobile) {
+                        $createdOrFoundId = $this->getOrCreateKeycloakUserForSurvey($bNic, $bName, $bMobile, $bAddress);
+                        if ($createdOrFoundId) $data['user_id'] = $createdOrFoundId;
+                    }
                     $newEditToken = Str::random(48);
                     $data['form_data'][self::EDIT_TOKEN_KEY] = hash('sha256', $newEditToken);
                     $data['created_by'] = $userId;

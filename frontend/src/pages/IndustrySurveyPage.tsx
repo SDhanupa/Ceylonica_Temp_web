@@ -18,6 +18,7 @@ import { GET_QUESTIONS, GET_GN_FOR_SURVEY, GET_CATEGORIES_BY_ROOT_SLUG } from '.
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import GnLocationModal from '../components/GnLocationModal';
 import { getUserName } from '../utils/cookieUtils';
+import { saveSurveyRequest, restoreRecoveredDraft } from '../utils/surveyDraftRecovery';
 
 /* ── Survey design system ─────────────────────────────────────────────────── */
 import {
@@ -715,9 +716,16 @@ const IndustrySurveyPage: React.FC = () => {
   const [genericAlertPopup, setGenericAlertPopup] = useState<{ open: boolean, title: string, message: string, tone?: DialogTone } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recoveryId, setRecoveryId] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   // Universal draft key works with or without ccode
   const draftKey = ccode ? `survey_draft_${ccode}` : `survey_draft_user_${userInfo?.sub || 'anon'}`;
+  const editTokenKey = `${draftKey}_edit_token`;
 
   useEffect(() => {
     const forceNew = localStorage.getItem('force_new_submission');
@@ -788,41 +796,55 @@ const IndustrySurveyPage: React.FC = () => {
     return () => { window.removeEventListener('pagehide', flush); flush(); };
   }, []);
 
-  /**
-   * POST the given payload to /api/industry-survey. If the server reports the
-   * `id` we sent no longer exists or isn't ours (404/403 — e.g. localStorage
-   * points at a row that was deleted, or was left over from a different
-   * account on a shared computer), clear the stale local reference and retry
-   * exactly once as a fresh save rather than getting permanently stuck
-   * resubmitting against a dead ID.
-   */
-  // The backend issues a secret edit token when a row is created; only its
-  // holder can update that row, so it travels with every save of this draft.
-  const editTokenKey = `${draftKey}_edit_token`;
-  const saveSurvey = async (payload: Record<string, any>, retrying = false): Promise<Response> => {
-    const editToken = payload.id ? localStorage.getItem(editTokenKey) : null;
-    const res = await fetch('/api/industry-survey', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(editToken ? { ...payload, edit_token: editToken } : payload),
-    });
+  const openRecovery = () => {
+    setRecoveryId(localStorage.getItem(`${draftKey}_db_id`) || '');
+    setRecoveryCode('');
+    setRecoveryError('');
+    setRecoveryOpen(true);
+  };
 
-    if (!retrying && (res.status === 404 || res.status === 403) && payload.id) {
-      localStorage.removeItem(`${draftKey}_db_id`);
-      localStorage.removeItem(editTokenKey);
-      const { id, ...retryPayload } = payload;
-      return saveSurvey(retryPayload, true);
+  // Serialize initial saves so multiple Next clicks cannot create duplicate rows.
+  const saveSurvey = (payload: Record<string, any>): Promise<Response> => {
+    const task = saveQueue.current.then(() => saveSurveyRequest(payload, draftKey, localStorage));
+    saveQueue.current = task.catch(() => undefined);
+    return task;
+  };
+
+  const handleRecoverDraft = async () => {
+    setRecoveryBusy(true);
+    setRecoveryError('');
+    try {
+      await saveQueue.current;
+      const response = await fetch('/api/industry-survey/recover-draft', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ id: Number(recoveryId), edit_token: recoveryCode.trim() }),
+      });
+      const body = await response.json();
+      if (!response.ok || !body.survey) throw new Error(L(
+        'Check the draft ID and private code. Only unfinished drafts can be recovered.',
+        'කෙටුම්පත් අංකය සහ පුද්ගලික කේතය පරීක්ෂා කරන්න. නැවත ලබාගත හැක්කේ අසම්පූර්ණ කෙටුම්පත් පමණි.',
+        'வரைவு எண்ணையும் தனிப்பட்ட குறியீட்டையும் சரிபார்க்கவும். முடிக்கப்படாத வரைவுகளை மட்டுமே மீட்கலாம்.',
+      ));
+      if (body.survey.ccode !== ccode) throw new Error(L(
+        'Select this draft’s original GN area before recovering it.',
+        'නැවත ලබාගැනීමට පෙර කෙටුම්පතේ මුල් ග්‍රාම නිලධාරී වසම තෝරන්න.',
+        'மீட்பதற்கு முன் இந்த வரைவின் அசல் கிராம அலுவலர் பிரிவைத் தேர்ந்தெடுக்கவும்.',
+      ));
+      pendingDraftWrite.current?.();
+      const draft = restoreRecoveredDraft(body.survey, recoveryCode.trim(), draftKey, localStorage);
+      setFormValues(draft.formValues);
+      setCurrentStep(draft.currentStep);
+      setGpsCoordinates(draft.gpsCoordinates);
+      setSurveyStartTime(new Date(draft.surveyStartTime));
+      setShowResumePopup(false);
+      setShowMetadataPopup(false);
+      setRecoveryCode('');
+      setRecoveryOpen(false);
+    } catch (error) {
+      setRecoveryError(error instanceof Error ? error.message : L('Recovery failed. Your draft is unchanged.', 'නැවත ලබාගැනීම අසාර්ථකයි. කෙටුම්පත වෙනස් වී නැත.', 'மீட்பு தோல்வியடைந்தது. வரைவு மாற்றப்படவில்லை.'));
+    } finally {
+      setRecoveryBusy(false);
     }
-
-    if (res.ok) {
-      const body = await res.clone().json().catch(() => null);
-      if (body?.edit_token) localStorage.setItem(editTokenKey, body.edit_token);
-    }
-
-    return res;
   };
 
   const handleSaveDraft = async (showPopup = true, stepOverride?: number) => {
@@ -857,6 +879,12 @@ const IndustrySurveyPage: React.FC = () => {
       }
 
       const res = await saveSurvey(payload);
+
+      if (res.status === 403) {
+        setSaveDraftDialogOpen(false);
+        openRecovery();
+        return;
+      }
 
       if (res.ok) {
         const data = await res.json();
@@ -1046,6 +1074,9 @@ const IndustrySurveyPage: React.FC = () => {
       >
         {L('Save and finish later', 'සුරකා පසුව අවසන් කරන්න', 'சேமித்து பின்னர் முடி')}
       </Button>
+      <Button type="button" onClick={openRecovery} sx={{ alignSelf: 'center', textTransform: 'none' }}>
+        {L('Recover an older draft', 'පැරණි කෙටුම්පතක් නැවත ලබාගන්න', 'பழைய வரைவை மீட்கவும்')}
+      </Button>
     </Box>
   );
 
@@ -1159,7 +1190,8 @@ const IndustrySurveyPage: React.FC = () => {
         if (response.status === 422 && reason?.toLowerCase().includes('verif')) {
           setOtpRequiredAlertOpen(true);
         } else if (response.status === 403) {
-          failAlert(L('Not allowed', 'අවසර නැත', 'அனுமதி இல்லை'), L('You do not have permission to modify this survey.', 'මෙම සමීක්ෂණය සංස්කරණය කිරීමට ඔබට අවසර නැත.', 'இந்தக் கணக்கெடுப்பை மாற்ற உங்களுக்கு அனுமதி இல்லை.'));
+          setSubmitDialogOpen(false);
+          openRecovery();
         } else if (response.status === 409) {
           failAlert(L('Already approved', 'දැනටමත් අනුමතයි', 'ஏற்கனவே அங்கீகரிக்கப்பட்டது'), L('This survey has already been approved and can no longer be changed.', 'මෙම සමීක්ෂණය දැනටමත් අනුමත කර ඇති බැවින් වෙනස් කළ නොහැක.', 'இந்தக் கணக்கெடுப்பு ஏற்கனவே அங்கீகரிக்கப்பட்டதால் மாற்ற முடியாது.'));
         } else if (response.status === 429) {
@@ -1781,6 +1813,27 @@ const IndustrySurveyPage: React.FC = () => {
             { icon: <MapRoundedIcon />, label: L('District', 'දිස්ත්‍රික්කය', 'மாவட்டம்'), value: gnPick('dis') },
           ]} />
         )}
+      </SurveyDialog>
+
+      <SurveyDialog
+        open={recoveryOpen}
+        onClose={recoveryBusy ? undefined : () => { setRecoveryOpen(false); setRecoveryCode(''); }}
+        icon={<HistoryRoundedIcon />}
+        title={L('Recover your saved draft', 'සුරැකි කෙටුම්පත නැවත ලබාගන්න', 'சேமித்த வரைவை மீட்கவும்')}
+        subtitle={L(
+          'Your answers have not been deleted. Ask the administrator to verify ownership and privately issue a recovery code for this draft. Never share the code publicly.',
+          'ඔබේ පිළිතුරු මකා නැත. හිමිකාරීත්වය තහවුරු කර මෙම කෙටුම්පත සඳහා පුද්ගලික ප්‍රතිසාධන කේතයක් ලබාදෙන ලෙස පරිපාලකගෙන් ඉල්ලන්න. කේතය ප්‍රසිද්ධියේ බෙදා නොගන්න.',
+          'உங்கள் பதில்கள் நீக்கப்படவில்லை. உரிமையைச் சரிபார்த்து இந்த வரைவுக்கான தனிப்பட்ட மீட்புக் குறியீட்டை வழங்க நிர்வாகியிடம் கேளுங்கள். குறியீட்டைப் பொதுவில் பகிர வேண்டாம்.',
+        )}
+        actions={<DialogButton disabled={recoveryBusy || !/^\d+$/.test(recoveryId) || recoveryCode.trim().length < 48} onClick={handleRecoverDraft}>
+          {L('Recover draft', 'කෙටුම්පත නැවත ලබාගන්න', 'வரைவை மீட்கவும்')}
+        </DialogButton>}
+      >
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          <TextField label={L('Draft ID', 'කෙටුම්පත් අංකය', 'வரைவு எண்')} value={recoveryId} onChange={e => setRecoveryId(e.target.value)} disabled={recoveryBusy} inputProps={{ inputMode: 'numeric' }} />
+          <TextField label={L('Private recovery code', 'පුද්ගලික ප්‍රතිසාධන කේතය', 'தனிப்பட்ட மீட்புக் குறியீடு')} type="password" autoComplete="off" value={recoveryCode} onChange={e => setRecoveryCode(e.target.value)} disabled={recoveryBusy} />
+          {recoveryError && <Typography role="alert" color="error">{recoveryError}</Typography>}
+        </Box>
       </SurveyDialog>
 
       {/* ── Resume an unfinished survey ── */}

@@ -38,6 +38,7 @@ Route::middleware('throttle:120,1')->group(function () {
 // Industry Survey submission — authentication removed for the public portal.
 Route::middleware(['throttle:20,1'])->group(function () {
     Route::post('/industry-survey', [IndustrySurveyController::class, 'store']);
+    Route::post('/industry-survey/recover-draft', [IndustrySurveyController::class, 'recoverDraft']);
     Route::post('/industry-survey/generate-reg-number', [IndustrySurveyController::class, 'generateRegNumber']);
     Route::post('/industry-survey/upload-photo', [IndustrySurveyController::class, 'uploadPhoto']);
 });
