@@ -14,7 +14,7 @@ class PublicBusinessController extends Controller
      * Sensitive fields that must NEVER appear on the public profile.
      */
     private const SENSITIVE_KEYS = [
-        'b_nic', 'q_nic', 'q_dob_age', 'q_email', 'q_address',
+        'b_nic', 'q_nic', 'q_dob', 'q_dob_age', 'q_email', 'q_address',
         'q_whatsapp', 'q_mobile', 'b_mobile',
     ];
 

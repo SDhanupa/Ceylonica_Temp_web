@@ -188,21 +188,27 @@ export interface DetailRow {
 export const DetailList: React.FC<{ rows: DetailRow[] }> = ({ rows }) => (
   <Box component="dl" sx={{ m: 0, borderRadius: '18px', border: `1px solid ${C.line}`, bgcolor: '#FAFCF8', overflow: 'hidden' }}>
     {rows.map((r, i) => (
+      // Each row holds exactly one <dt> and one <dd> (valid dl grouping). The
+      // icon lives inside the <dt>, which uses display: contents so the icon,
+      // label and value still lay out on one grid.
       <Box
         key={i}
-        sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.4, borderTop: i ? `1px solid ${C.line}` : 'none' }}
+        sx={{
+          display: 'grid', gridTemplateColumns: r.icon ? '36px minmax(0, 1fr)' : 'minmax(0, 1fr)', columnGap: 1.5, alignItems: 'center',
+          px: 2, py: 1.4, borderTop: i ? `1px solid ${C.line}` : 'none',
+        }}
       >
-        {r.icon && (
-          <Box aria-hidden sx={{ width: 36, height: 36, borderRadius: '11px', display: 'grid', placeItems: 'center', flexShrink: 0, bgcolor: '#E6F4DF', color: C.field, '& .MuiSvgIcon-root': { fontSize: '1.15rem' } }}>
-            {r.icon}
-          </Box>
-        )}
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography component="dt" sx={{ fontSize: '0.78rem', fontWeight: 700, color: C.inkMuted, lineHeight: 1.3 }}>{r.label}</Typography>
-          <Typography component="dd" sx={{ m: 0, fontSize: '1rem', fontWeight: 700, color: C.ink, lineHeight: 1.45, wordBreak: 'break-word' }}>
-            {r.value === undefined ? <Skeleton width="60%" /> : r.value}
-          </Typography>
+        <Box component="dt" sx={{ display: 'contents' }}>
+          {r.icon && (
+            <Box aria-hidden sx={{ gridRow: '1 / span 2', width: 36, height: 36, borderRadius: '11px', display: 'grid', placeItems: 'center', bgcolor: '#E6F4DF', color: C.field, '& .MuiSvgIcon-root': { fontSize: '1.15rem' } }}>
+              {r.icon}
+            </Box>
+          )}
+          <Typography component="span" sx={{ gridColumn: r.icon ? 2 : 1, fontSize: '0.78rem', fontWeight: 700, color: C.inkMuted, lineHeight: 1.3 }}>{r.label}</Typography>
         </Box>
+        <Typography component="dd" sx={{ gridColumn: r.icon ? 2 : 1, m: 0, fontSize: '1rem', fontWeight: 700, color: C.ink, lineHeight: 1.45, wordBreak: 'break-word' }}>
+          {r.value === undefined ? <Skeleton width="60%" /> : r.value}
+        </Typography>
       </Box>
     ))}
   </Box>

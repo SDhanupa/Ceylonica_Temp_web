@@ -1,4 +1,5 @@
 import React from 'react';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import {
   Box,
   Typography,
@@ -154,6 +155,8 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
     <Select
       key={`district-${language}`}
       size="small"
+      SelectDisplayProps={{ 'aria-label': t.district } as React.HTMLAttributes<HTMLDivElement>}
+      inputProps={{ 'aria-label': t.district }}
       value={selectedDistrict || ''}
       onChange={(e) => onDistrictChange?.(e.target.value)}
       displayEmpty
@@ -176,6 +179,8 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
     <Select
       key={`ds-${language}`}
       size="small"
+      SelectDisplayProps={{ 'aria-label': t.dsDivision } as React.HTMLAttributes<HTMLDivElement>}
+      inputProps={{ 'aria-label': t.dsDivision }}
       value={selectedCity || ''}
       onChange={(e) => onCityChange?.(e.target.value)}
       displayEmpty
@@ -199,6 +204,8 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
     <Select
       key={`gn-${language}`}
       size="small"
+      SelectDisplayProps={{ 'aria-label': t.village } as React.HTMLAttributes<HTMLDivElement>}
+      inputProps={{ 'aria-label': t.village }}
       value={selectedGN || ''}
       onChange={(e) => onGNChange?.(e.target.value)}
       displayEmpty
@@ -352,7 +359,17 @@ export const GnTopHeaderBar: React.FC<GnTopHeaderBarProps> = ({
                   '&:hover': onEditName ? { transform: { md: 'scale(1.02)' }, borderColor: '#10b981' } : {},
                 }}
               >
-                <Typography sx={{ fontSize: { xs: '0.95rem', md: '1.05rem' } }}>👤</Typography>
+                <Box
+                  aria-hidden
+                  sx={{
+                    width: { xs: 24, md: 28 }, height: { xs: 24, md: 28 }, borderRadius: '50%', flexShrink: 0,
+                    display: 'grid', placeItems: 'center',
+                    bgcolor: isDarkMode ? 'rgba(110,231,183,0.18)' : '#ffffff',
+                    color: isDarkMode ? '#6ee7b7' : '#047857',
+                  }}
+                >
+                  <PersonOutlineRoundedIcon sx={{ fontSize: { xs: '1rem', md: '1.15rem' } }} />
+                </Box>
                 <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                   <Typography
                     sx={{

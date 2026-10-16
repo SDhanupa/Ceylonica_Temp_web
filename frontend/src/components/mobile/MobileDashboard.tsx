@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import {
   Box, Typography, IconButton, Chip, Menu, MenuItem, Divider,
   Dialog, DialogContent, DialogActions, Button, SwipeableDrawer, useScrollTrigger,
@@ -180,7 +181,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = (props) => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                👤 {userName}
+                <PersonOutlineRoundedIcon aria-hidden sx={{ fontSize: '1em', verticalAlign: '-0.15em', mr: 0.5 }} />{userName}
               </Typography>
             )}
           </Box>

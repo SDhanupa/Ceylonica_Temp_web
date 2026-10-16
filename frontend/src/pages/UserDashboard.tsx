@@ -1,6 +1,8 @@
 // Forced reload for Vite (Fixed pie chart background and translations)
 // Forced reload for Vite (Added title glassmorphism panels back)
 import React, { useState, useEffect } from 'react';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
+import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import { Box, Typography, Button, Container, Grid, FormControl, useTheme, useMediaQuery, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, TextField, IconButton, Divider, Menu, MenuItem, Fab, Fade, useScrollTrigger } from '@mui/material';
 import { useQuery } from '@apollo/client';
 import { GET_P_DISTRICTS, GET_P_DISTRICT_WITH_GNS, GET_GN_BY_COORDINATES, GET_GN_BY_CCODE } from '../graphql/queries';
@@ -850,7 +852,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
                   fontWeight: 600,
                   '&:hover': { bgcolor: 'rgba(0,168,255,0.08)', borderColor: themeColors.primary }
                 }}
-                startIcon={<span style={{ fontSize: '1.1em' }}>📍</span>}
+                startIcon={<PlaceOutlinedIcon />}
               >
                 Use GPS Auto-Location
               </Button>
@@ -927,7 +929,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
       >
         <DialogTitle sx={{ fontWeight: 800, color: isDarkMode ? '#f8fafc' : '#0f172a', display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
           <Box sx={{ width: 40, height: 40, borderRadius: '12px', bgcolor: isDarkMode ? 'rgba(37,99,235,0.25)' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', color: '#2563eb' }}>
-            👤
+            <PersonOutlineRoundedIcon />
           </Box>
           <Box>
             <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.2, color: isDarkMode ? '#f8fafc' : '#0f172a' }}>
@@ -1154,7 +1156,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user }) => {
                   }
                 }}
               >
-                <Typography sx={{ fontSize: '0.85rem' }}>👤</Typography>
+                <PersonOutlineRoundedIcon aria-hidden sx={{ fontSize: '1rem' }} />
                 <Typography
                   sx={{
                     fontWeight: 700,

@@ -14,7 +14,9 @@ const SurveyProgress: React.FC<{
   current: number;
   maxReached: number;
   onJump: (i: number) => void;
-}> = ({ sections, current, maxReached, onJump }) => {
+  /** Localised "Section" word; the page passes it in its current language. */
+  sectionLabel?: string;
+}> = ({ sections, current, maxReached, onJump, sectionLabel = 'Section' }) => {
   const total = sections.length;
   const pct = Math.round(((current + 1) / total) * 100);
   const active = sections[current];
@@ -83,7 +85,7 @@ const SurveyProgress: React.FC<{
               mb: 0.4,
             }}
           >
-            {`Section ${current + 1} / ${total}`}
+            {`${sectionLabel} ${current + 1} / ${total}`}
           </Typography>
           <Typography
             noWrap
